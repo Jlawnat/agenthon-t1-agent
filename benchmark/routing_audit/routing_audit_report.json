@@ -1,0 +1,458 @@
+{
+  "units_audited": 87,
+  "load_error_count": 0,
+  "empty_review_pack_count": 0,
+  "category_counts": {
+    "cross-domain": 20,
+    "derivatives-pricing": 14,
+    "risk-management": 8,
+    "fixed-income": 5,
+    "backtesting": 3,
+    "factor-research": 3,
+    "execution": 2,
+    "derivatives": 2,
+    "tool-using": 2,
+    "credit-risk": 2,
+    "factor-models": 2,
+    "pricing": 2,
+    "performance-attribution": 1,
+    "dependence-modeling": 1,
+    "credit-analysis": 1,
+    "cross-sectional-strategies": 1,
+    "crypto": 1,
+    "risk-modeling": 1,
+    "cross-asset-analysis": 1,
+    "portfolio-analysis": 1,
+    "fixed-income-nlp": 1,
+    "fx-strategy": 1,
+    "fx-pricing": 1,
+    "interest-rate-derivatives": 1,
+    "predictive-alpha-modeling": 1,
+    "derivatives_pricing": 1,
+    "cross-currency-rates": 1,
+    "volatility-modeling": 1,
+    "stochastic-processes": 1,
+    "strategy": 1,
+    "debug-migration": 1,
+    "event-driven-analysis, data-processing": 1,
+    "extreme-value-theory": 1,
+    "statistical-analysis": 1
+  },
+  "candidate_count_distribution": {
+    "2": 41,
+    "3": 37,
+    "1": 9
+  },
+  "review_pack_counts": {
+    "software": 87,
+    "numerical": 72,
+    "data-causality": 40,
+    "accounting": 32,
+    "cross-domain": 20,
+    "derivatives": 19,
+    "risk-management": 13,
+    "factor-research": 11,
+    "fixed-income": 11,
+    "backtesting": 7,
+    "microstructure": 3,
+    "credit": 3,
+    "fx": 3,
+    "nlp-finance": 1
+  },
+  "loaded_skill_pack_counts": {
+    "software": 87,
+    "numerical": 72,
+    "data-causality": 40,
+    "accounting": 32,
+    "cross-domain": 20,
+    "derivatives": 19,
+    "risk-management": 13,
+    "factor-research": 11,
+    "fixed-income": 11,
+    "backtesting": 7,
+    "microstructure": 3,
+    "credit": 3,
+    "fx": 3,
+    "nlp-finance": 1
+  },
+  "routes_by_category": {
+    "backtesting": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "accounting",
+          "backtesting"
+        ],
+        "count": 3
+      }
+    ],
+    "credit-analysis": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "credit"
+        ],
+        "count": 1
+      }
+    ],
+    "credit-risk": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "credit"
+        ],
+        "count": 2
+      }
+    ],
+    "cross-asset-analysis": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "factor-research"
+        ],
+        "count": 1
+      }
+    ],
+    "cross-currency-rates": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "fixed-income",
+          "fx"
+        ],
+        "count": 1
+      }
+    ],
+    "cross-domain": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain"
+        ],
+        "count": 20
+      }
+    ],
+    "cross-sectional-strategies": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "accounting",
+          "factor-research",
+          "backtesting"
+        ],
+        "count": 1
+      }
+    ],
+    "crypto": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "data-causality",
+          "accounting",
+          "backtesting"
+        ],
+        "count": 1
+      }
+    ],
+    "debug-migration": [
+      {
+        "review_packs": [
+          "software"
+        ],
+        "count": 1
+      }
+    ],
+    "dependence-modeling": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "risk-management"
+        ],
+        "count": 1
+      }
+    ],
+    "derivatives": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "derivatives"
+        ],
+        "count": 2
+      }
+    ],
+    "derivatives-pricing": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "derivatives"
+        ],
+        "count": 14
+      }
+    ],
+    "derivatives_pricing": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "derivatives"
+        ],
+        "count": 1
+      }
+    ],
+    "event-driven-analysis, data-processing": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "factor-research"
+        ],
+        "count": 1
+      }
+    ],
+    "execution": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "accounting",
+          "microstructure"
+        ],
+        "count": 2
+      }
+    ],
+    "extreme-value-theory": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "risk-management"
+        ],
+        "count": 1
+      }
+    ],
+    "factor-models": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "factor-research"
+        ],
+        "count": 2
+      }
+    ],
+    "factor-research": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "factor-research"
+        ],
+        "count": 3
+      }
+    ],
+    "fixed-income": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "fixed-income"
+        ],
+        "count": 5
+      }
+    ],
+    "fixed-income-nlp": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "fixed-income",
+          "nlp-finance"
+        ],
+        "count": 1
+      }
+    ],
+    "fx-pricing": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "fx"
+        ],
+        "count": 1
+      }
+    ],
+    "fx-strategy": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "backtesting",
+          "fx"
+        ],
+        "count": 1
+      }
+    ],
+    "interest-rate-derivatives": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "derivatives",
+          "fixed-income"
+        ],
+        "count": 1
+      }
+    ],
+    "performance-attribution": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "accounting",
+          "factor-research"
+        ],
+        "count": 1
+      }
+    ],
+    "portfolio-analysis": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "accounting",
+          "risk-management"
+        ],
+        "count": 1
+      }
+    ],
+    "predictive-alpha-modeling": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "factor-research",
+          "microstructure"
+        ],
+        "count": 1
+      }
+    ],
+    "pricing": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "fixed-income",
+          "derivatives"
+        ],
+        "count": 1
+      },
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "fixed-income"
+        ],
+        "count": 1
+      }
+    ],
+    "risk-management": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "risk-management"
+        ],
+        "count": 8
+      }
+    ],
+    "risk-modeling": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "risk-management"
+        ],
+        "count": 1
+      }
+    ],
+    "statistical-analysis": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "fixed-income"
+        ],
+        "count": 1
+      }
+    ],
+    "stochastic-processes": [
+      {
+        "review_packs": [
+          "software",
+          "numerical"
+        ],
+        "count": 1
+      }
+    ],
+    "strategy": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "accounting",
+          "factor-research",
+          "backtesting"
+        ],
+        "count": 1
+      }
+    ],
+    "tool-using": [
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "accounting"
+        ],
+        "count": 1
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical"
+        ],
+        "count": 1
+      }
+    ],
+    "volatility-modeling": [
+      {
+        "review_packs": [
+          "software",
+          "numerical",
+          "risk-management"
+        ],
+        "count": 1
+      }
+    ]
+  },
+  "empty_review_pack_units": [],
+  "load_errors": []
+}

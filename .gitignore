@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets / local environment
+.env
+.env.*
+*.key
+*.pem
+
+# Runtime-generated artifacts
+runs/
+output/
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+*.tmp
+*.log
+
+# Detailed generated benchmark rows
+benchmark/*/*_rows.csv
+benchmark/*/*_rows.json
+benchmark/contract_audit/contract_audit_failures.csv
+agent/skill_packs_before_depth_expansion.py

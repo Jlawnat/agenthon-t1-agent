@@ -1,0 +1,335 @@
+{
+  "packs_audited": 14,
+  "load_failures": 0,
+  "packs_with_missing_capability_signals": 0,
+  "missing_capability_signal_counts": {},
+  "packs": [
+    {
+      "pack": "software",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 358,
+      "list_item_count": 10,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "contracts": true,
+        "robustness": true,
+        "reproducibility": true
+      },
+      "capability_hit_count": 3,
+      "capability_total": 3,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "numerical",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 806,
+      "list_item_count": 13,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "stability": true,
+        "convergence": true,
+        "root_optimisation": true,
+        "simulation": true
+      },
+      "capability_hit_count": 4,
+      "capability_total": 4,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "data-causality",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 467,
+      "list_item_count": 10,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "lookahead": true,
+        "timestamps": true,
+        "split_discipline": true
+      },
+      "capability_hit_count": 3,
+      "capability_total": 3,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "accounting",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 422,
+      "list_item_count": 9,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "nav": true,
+        "pnl": true,
+        "cash_positions": true,
+        "costs": true
+      },
+      "capability_hit_count": 4,
+      "capability_total": 4,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "derivatives",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 1468,
+      "list_item_count": 19,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "black_scholes": true,
+        "greeks": true,
+        "parity_bounds": true,
+        "trees_pde": true,
+        "monte_carlo": true,
+        "calibration": true
+      },
+      "capability_hit_count": 6,
+      "capability_total": 6,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "fixed-income",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 1088,
+      "list_item_count": 14,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "discounting": true,
+        "curve": true,
+        "duration_dv01": true,
+        "rates": true
+      },
+      "capability_hit_count": 4,
+      "capability_total": 4,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "credit",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 938,
+      "list_item_count": 12,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "default_survival": true,
+        "recovery": true,
+        "cds": true,
+        "migration": true
+      },
+      "capability_hit_count": 4,
+      "capability_total": 4,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "factor-research",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 927,
+      "list_item_count": 12,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "ic": true,
+        "neutrality": true,
+        "ranking": true,
+        "lookahead": true,
+        "factor_portfolio": true
+      },
+      "capability_hit_count": 5,
+      "capability_total": 5,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "backtesting",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 985,
+      "list_item_count": 13,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "self_financing": true,
+        "costs_turnover": true,
+        "positions_fills": true,
+        "lookahead": true,
+        "performance": true
+      },
+      "capability_hit_count": 5,
+      "capability_total": 5,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "risk-management",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 1145,
+      "list_item_count": 14,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "var": true,
+        "es": true,
+        "stress": true,
+        "covariance": true,
+        "aggregation": true
+      },
+      "capability_hit_count": 5,
+      "capability_total": 5,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "microstructure",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 987,
+      "list_item_count": 14,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "spread": true,
+        "vwap": true,
+        "implementation_shortfall": true,
+        "execution": true,
+        "orderbook": true
+      },
+      "capability_hit_count": 5,
+      "capability_total": 5,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "fx",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 918,
+      "list_item_count": 12,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "cip": true,
+        "forwards": true,
+        "triangular": true,
+        "quote_convention": true,
+        "fx_options": true
+      },
+      "capability_hit_count": 5,
+      "capability_total": 5,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "nlp-finance",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 833,
+      "list_item_count": 11,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "sentiment": true,
+        "temporal": true,
+        "text_processing": true,
+        "finance_context": true
+      },
+      "capability_hit_count": 4,
+      "capability_total": 4,
+      "missing_capabilities": [],
+      "load_error": null
+    },
+    {
+      "pack": "cross-domain",
+      "loaded": true,
+      "payload_type": "SkillPack",
+      "payload_keys": [
+        "checks",
+        "guidance",
+        "name"
+      ],
+      "text_chars": 794,
+      "list_item_count": 11,
+      "dict_item_count": 3,
+      "capability_hits": {
+        "union": true,
+        "units": true,
+        "decomposition": true,
+        "aggregation": true
+      },
+      "capability_hit_count": 4,
+      "capability_total": 4,
+      "missing_capabilities": [],
+      "load_error": null
+    }
+  ]
+}

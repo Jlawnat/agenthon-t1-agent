@@ -1,0 +1,303 @@
+{
+  "units_audited": 87,
+  "expected_units": 87,
+  "classification_counts": {
+    "aligned_not_required": 40,
+    "aligned_required": 29,
+    "possible_false_positive": 18
+  },
+  "review_units": [
+    {
+      "unit_dir": "t1-cliquet-ratchet-pricing",
+      "task_id": "t1-cliquet-ratchet-pricing",
+      "category": "derivatives-pricing",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "numerical",
+        "derivatives"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-copula-equity-fitting",
+      "task_id": "t1-copula-equity-fitting",
+      "category": "risk-management",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-copula-sampling-rank-correlation",
+      "task_id": "t1-copula-sampling-rank-correlation",
+      "category": "dependence-modeling",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-credit-migration-matrix",
+      "task_id": "t1-credit-migration-matrix",
+      "category": "credit-risk",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "credit"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-delta-hedging-pnl-simulation",
+      "task_id": "t1-delta-hedging-pnl-simulation",
+      "category": "derivatives-pricing",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "derivatives"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-digital-barrier-options",
+      "task_id": "t1-digital-barrier-options",
+      "category": "derivatives-pricing",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "derivatives"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-etf-overlap-redemption-pressure",
+      "task_id": "t1-etf-overlap-redemption-pressure",
+      "category": "portfolio-analysis",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "accounting",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-evt-pot-var",
+      "task_id": "t1-evt-pot-var",
+      "category": "risk-management",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-ewma-portfolio-risk-decomposition",
+      "task_id": "t1-ewma-portfolio-risk-decomposition",
+      "category": "risk-management",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-fomc-tone-event-study",
+      "task_id": "t1-fomc-tone-event-study",
+      "category": "fixed-income-nlp",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "data-causality",
+        "numerical",
+        "fixed-income",
+        "nlp-finance"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-historical-var-data-prep",
+      "task_id": "t1-historical-var-data-prep",
+      "category": "risk-management",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-localvol-barrier",
+      "task_id": "t1-localvol-barrier",
+      "category": "derivatives-pricing",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "numerical",
+        "derivatives"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-mtm-xccy-basis-desk",
+      "task_id": "t1-mtm-xccy-basis-desk",
+      "category": "cross-currency-rates",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "fixed-income",
+        "fx"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-ohlc-realized-vol-estimators",
+      "task_id": "t1-ohlc-realized-vol-estimators",
+      "category": "volatility-modeling",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-option-put-call-parity-forward-audit",
+      "task_id": "t1-option-put-call-parity-forward-audit",
+      "category": "derivatives",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "derivatives"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-standard-var-methods",
+      "task_id": "t1-standard-var-methods",
+      "category": "risk-management",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "numerical",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-swap-curve-bootstrap-ois",
+      "task_id": "t1-swap-curve-bootstrap-ois",
+      "category": "fixed-income",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "fixed-income"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-yield-curve-bond-immunization",
+      "task_id": "t1-yield-curve-bond-immunization",
+      "category": "fixed-income",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "numerical",
+        "fixed-income"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    }
+  ]
+}
