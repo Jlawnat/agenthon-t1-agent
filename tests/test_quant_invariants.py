@@ -10,10 +10,10 @@ import pandas as pd
 
 from agent.quant_invariants import (
     QuantInvariantConfig,
+    _CHECKS,
     evaluate_quant_invariants,
     invariant_registry_snapshot,
 )
-
 
 def _by_name(evidence):
     return {item.name: item for item in evidence}
@@ -464,6 +464,74 @@ class QuantInvariantDomainPackTests(unittest.TestCase):
         self.assertEqual(result.status, "warning")
         self.assertEqual(result.severity, "warning")
 
+class CrossDomainInvariantActivationTests(
+    unittest.TestCase
+):
+    def test_cross_domain_activates_only_constituent_domains(
+        self,
+    ) -> None:
+        config = QuantInvariantConfig(
+            category="cross-domain",
+            review_packs=(
+                "software",
+                "data-causality",
+                "numerical",
+                "accounting",
+                "cross-domain",
+                "derivatives",
+                "fixed-income",
+            ),
+        )
 
+        active = {
+            check.name
+            for check in _CHECKS
+            if check.is_active(config)
+        }
+
+        self.assertIn(
+            "put_call_parity",
+            active,
+        )
+        self.assertIn(
+            "option_price_bounds",
+            active,
+        )
+        self.assertIn(
+            "discount_factor_monotonicity",
+            active,
+        )
+        self.assertIn(
+            "dv01_duration_consistency",
+            active,
+        )
+
+        unrelated = {
+            "survival_probability_monotonicity",
+            "information_coefficient_bounds",
+            "dollar_neutrality",
+            "portfolio_compounding",
+            "risk_measure_ordering",
+            "bid_ask_ordering",
+            "vwap_range",
+            "execution_quantity_reconciliation",
+            "covered_interest_parity",
+            "triangular_fx_consistency",
+            "sentiment_bounds",
+            "entity_count_integrality",
+        }
+
+        self.assertTrue(
+            unrelated.isdisjoint(active),
+            msg=(
+                "Unexpected unrelated invariant activation: "
+                f"{sorted(unrelated & active)}"
+            ),
+        )
+
+        self.assertIn(
+            "cross_domain_pack_coverage",
+            active,
+        )
 if __name__ == "__main__":
     unittest.main()

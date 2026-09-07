@@ -132,10 +132,13 @@ class _InvariantCheck:
         if check_categories.intersection(declared_domains):
             return True
 
-        # Cross-domain tasks use the union of their declared/inferred
-        # constituent packs. Activating domain checks here is safe because
-        # each evaluator skips explicitly unless its semantic inputs exist.
-        if category == "cross-domain" and check_categories.intersection(_DOMAIN_IDS):
+        declared_domains = {
+            domain
+            for value in config.review_packs
+            if (domain := _canonical_domain(value)) in _DOMAIN_IDS
+        }
+
+        if check_categories.intersection(declared_domains):
             return True
 
         return False

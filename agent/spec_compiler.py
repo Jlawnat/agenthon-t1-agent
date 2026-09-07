@@ -184,6 +184,147 @@ CATEGORY_ROUTE_OVERRIDES = {
         "risk-management",
     ],
 }
+CROSS_DOMAIN_PATTERNS: dict[str, tuple[str, ...]] = {
+    "derivatives": (
+        r"\bamerican option",
+        r"\bcompound option",
+        r"\bbarrier option",
+        r"\boption pricing",
+        r"\boption price",
+        r"\bput[- ]call parity",
+        r"\bblack[- ]scholes",
+        r"\bbarone[- ]adesi",
+        r"\bgeske\b",
+        r"\bdupire\b",
+        r"\blocal volatility",
+        r"\bswaption",
+    ),
+    "fixed-income": (
+        r"\bzero[- ]coupon bond",
+        r"\bbond pricing",
+        r"\byield curve",
+        r"\bdiscount factor",
+        r"\bdv01\b",
+        r"\bmodified duration",
+        r"\bterm structure",
+    ),
+    "credit": (
+        r"\bcredit default swap",
+        r"\bcds\b",
+        r"\bcva\b",
+        r"\bsurvival probability",
+        r"\bhazard rate",
+        r"\bloss given default",
+        r"\blgd\b",
+        r"\brecovery rate",
+    ),
+    "factor-research": (
+        r"\binformation coefficient",
+        r"\bcross[- ]sectional",
+        r"\bfama[- ]french",
+        r"\bfactor exposure",
+        r"\bfactor return",
+        r"\blatent factor",
+        r"\blong[- ]short",
+        r"\balpha signal",
+        r"\bcrowding\b",
+        r"\bsale[- ]pressure",
+        r"\bipca\b",
+    ),
+    "backtesting": (
+        r"\bbacktest",
+        r"\btransaction cost",
+        r"\bstrategy return",
+        r"\bequity curve",
+        r"\btrading strategy",
+        r"\bexecution lag",
+        r"\bcta strategy",
+    ),
+    "risk-management": (
+        r"\bvalue[- ]at[- ]risk",
+        r"\bparametric var",
+        r"\bportfolio var",
+        r"\bvar constraint",
+        r"\bvar decomposition",
+        r"\bstressed var",
+        r"\bcvar\b",
+        r"\bexpected shortfall",
+        r"\brisk[- ]parity",
+        r"\bvolatility target",
+        r"\bbasel\b",
+        r"\brealized volatility",
+        r"\brealised volatility",
+        r"\bblack[- ]litterman",
+        r"\brisk budget",
+    ),
+    "microstructure": (
+        r"\bcross[- ]venue",
+        r"\border book",
+        r"\bbid[- ]ask",
+        r"\bvwap\b",
+        r"\bmarket impact",
+        r"\bslippage",
+        r"\bexecution price",
+        r"\bimplementation shortfall",
+    ),
+    "fx": (
+        r"\bforeign exchange",
+        r"\bfx forward",
+        r"\bcross[- ]currency",
+        r"\bcovered interest parity",
+        r"\beurusd\b",
+        r"\busdjpy\b",
+        r"\bgarman[- ]kohlhagen",
+    ),
+    "nlp-finance": (
+        r"\bsentiment",
+        r"\bnatural language",
+        r"\bnlp\b",
+        r"\b10[- ]k\b",
+        r"\b10[- ]q\b",
+        r"\bedgar\b",
+        r"\bgdelt\b",
+        r"\bfiling text",
+        r"\bearnings call",
+        r"\bnews text",
+    ),
+}
+
+
+def infer_cross_domain_packs(
+    instruction_text: str,
+) -> list[str]:
+    """
+    Add only high-confidence constituent finance packs to the
+    generic cross-domain route.
+
+    Broad words such as "factor", "default", "currency", and
+    "stress test" are intentionally excluded because the public
+    corpus showed they create false-positive domain routing.
+    """
+
+    text = instruction_text.lower()
+
+    packs = list(
+        CATEGORY_REVIEW_PACKS[
+            "cross-domain"
+        ]
+    )
+
+    for domain, patterns in (
+        CROSS_DOMAIN_PATTERNS.items()
+    ):
+        if any(
+            re.search(
+                pattern,
+                text,
+                flags=re.IGNORECASE,
+            )
+            for pattern in patterns
+        ):
+            packs.append(domain)
+
+    return packs
 
 def infer_review_packs(
     spec: TaskSpecification,
@@ -215,6 +356,10 @@ def infer_review_packs(
             category,
         )
     )
+    if canonical == "cross-domain":
+        return infer_cross_domain_packs(
+            spec.instruction_text
+        )
 
     if canonical in CATEGORY_REVIEW_PACKS:
         return list(
