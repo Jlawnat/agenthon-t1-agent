@@ -655,7 +655,18 @@ _SAFE_QUANT_DETAIL_KEYS = {
     "unit",
     "convention",
 }
-
+_SAFE_QUANT_DETAIL_KEYS_BY_INVARIANT = {
+    "weight_reconciliation": {
+        "target",
+        "actual_sum",
+        "actual_sums",
+        "grouping_columns",
+        "explicit_target",
+    },
+    "clean_dirty_reconciliation": {
+        "maximum_absolute_difference",
+    },
+}
 
 def _safe_value(
     value: Any,
@@ -752,11 +763,19 @@ def _safe_structural_details(
 def _safe_quant_details(
     item: VerificationEvidence,
 ) -> dict[str, Any]:
+    allowed = set(
+        _SAFE_QUANT_DETAIL_KEYS
+    )
+    allowed.update(
+        _SAFE_QUANT_DETAIL_KEYS_BY_INVARIANT.get(
+            item.name,
+            set(),
+        )   
+    )
+
     result: dict[str, Any] = {}
 
-    for key in sorted(
-        _SAFE_QUANT_DETAIL_KEYS
-    ):
+    for key in sorted(allowed):
         if key not in item.details:
             continue
 

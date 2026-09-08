@@ -478,7 +478,73 @@ class TargetedRepairTests(
                 estimated_tokens=21,
             )
         )
+    def test_known_quant_repair_details_are_preserved_safely(
+        self,
+    ) -> None:
+        attempt = CandidateAttempt(
+            attempt_number=1,
+            return_code=0,
+        )
 
+        attempt.quant_evidence.append( 
+            VerificationEvidence(
+                name="weight_reconciliation",
+                status="fail",
+                severity="hard_fail",
+                message=(
+                    "Portfolio weights do not "
+                    "reconcile to 1."
+                ),
+                details={
+                    "violation_count": 1,
+                    "target": 1.0,
+                    "actual_sum": 0.90,
+                    "actual_sums": [0.90],
+                    "grouping_columns": [
+                        "weight_set",
+                    ],
+                    "explicit_target": True,
+                    "secret_reference_value": 123.456,
+                },
+            )
+        )
+         
+        brief = build_repair_brief(
+            attempt=attempt,
+            budget=RepairBudget(
+                max_attempts=1
+            ),
+        )
+    
+        self.assertIsNotNone(brief)
+    
+        details = (
+            brief
+            .relevant_invariants[0]
+            ["details"]
+        )
+    
+        self.assertEqual(
+            details["target"],
+            1.0,
+        )
+        self.assertEqual(
+            details["actual_sum"],
+            0.90,
+        )
+        self.assertEqual(
+            details["actual_sums"],
+            [0.90],
+        )
+        self.assertEqual(
+            details["grouping_columns"],
+            ["weight_set"],
+        )
+    
+        self.assertNotIn(
+            "secret_reference_value",
+            details,
+        )
 
 if __name__ == "__main__":
     unittest.main()
