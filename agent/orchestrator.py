@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 import os
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 from agent.audit_pipeline import (
     CleanRoomAuditResult,
@@ -225,6 +225,56 @@ def _checkpoint_expected_files(
     return ()
 
 
+def _resolve_candidate_count(
+    *,
+    requested: int | None,
+    plan: Any,
+    default: int = 3,
+) -> int:
+    """
+    Resolve candidate generation count.
+
+    An explicit caller override wins. Otherwise use
+    the deterministic task-plan allocation when the
+    runtime plan exposes it. Generic/test plans fall
+    back to the safe historical default.
+    """
+
+    if requested is not None:
+        if (
+            isinstance(requested, bool)
+            or not isinstance(requested, int)
+            or requested <= 0
+        ):
+            raise ValueError(
+                "candidate_count must be a "
+                "positive integer"
+            )
+
+        return requested
+
+    task_plan = getattr(
+        plan,
+        "task_plan",
+        None,
+    )
+
+    planned = getattr(
+        task_plan,
+        "candidate_count",
+        None,
+    )
+
+    if (
+        isinstance(planned, int)
+        and not isinstance(planned, bool)
+        and planned > 0
+    ):
+        return planned
+
+    return default
+
+
 def solve_task(
     *,
     task_dir: Path,
@@ -233,7 +283,7 @@ def solve_task(
     front_half_dependencies: FrontHalfDependencies,
     generator: GeneratorAdapter,
     repairer: RepairAdapter,
-    candidate_count: int = 3,
+    candidate_count: int | None = None,
     execution_timeout_seconds: float = 120.0,
     audit_timeout_seconds: float = 120.0,
     repair_budget: RepairBudget | None = None,
@@ -394,6 +444,13 @@ def solve_task(
             )
         )
 
+        resolved_candidate_count = (
+            _resolve_candidate_count(
+                requested=candidate_count,
+                plan=front_half.plan,
+            )
+        )
+
         journal.event(
             "front_half_completed",
             state=state,
@@ -442,7 +499,7 @@ def solve_task(
                 ),
                 generator=generator,
                 candidate_count=(
-                    candidate_count
+                    resolved_candidate_count
                 ),
                 execution_timeout_seconds=(
                     execution_timeout_seconds

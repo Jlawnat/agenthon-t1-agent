@@ -136,7 +136,6 @@ def solve(
         ),
         generator=generator,
         repairer=repairer,
-        candidate_count=3,
         environ=os.environ,
     )
 
