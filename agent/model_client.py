@@ -14,6 +14,7 @@ from typing import Any
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_REQUEST_BYTES = 8 * 1024 * 1024
 DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+DEFAULT_MAX_OUTPUT_TOKENS = 16000
 MAX_ERROR_BODY_BYTES = 4096
 MAX_ENDPOINT_CHARS = 2048
 MAX_MODEL_NAME_CHARS = 256
@@ -45,6 +46,7 @@ class ModelClient:
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         max_request_bytes: int = DEFAULT_MAX_REQUEST_BYTES,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
+        max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
     ) -> None:
         self.endpoint = (
             endpoint
@@ -71,6 +73,11 @@ class ModelClient:
         self.max_response_bytes = self._positive_integer(
             max_response_bytes,
             name="max_response_bytes",
+        )
+
+        self.max_output_tokens = self._positive_integer(
+            max_output_tokens,
+            name="max_output_tokens",
         )
 
         if self.endpoint is not None:
@@ -140,6 +147,7 @@ class ModelClient:
                 }
             ],
             "temperature": temperature_value,
+            "max_tokens": self.max_output_tokens,
         }
 
         body = json.dumps(

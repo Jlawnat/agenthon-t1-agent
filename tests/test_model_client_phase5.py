@@ -244,6 +244,52 @@ class ModelClientSecurityTests(
             "authorization",
             seen["headers"],
         )
+    def test_request_caps_output_tokens(
+        self,
+    ) -> None:
+        body = json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "ok"
+                        }
+                    }
+                ]
+            }
+        ).encode("utf-8")
+
+        client = ModelClient(
+            endpoint="https://example.test/v1",
+            model="m",
+        )
+
+        seen = {}
+
+        def fake_urlopen(
+            request,
+            timeout,
+        ):
+            seen["payload"] = json.loads(
+                request.data.decode(
+                    "utf-8"
+                )
+            )
+
+            return _FakeResponse(body)
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=fake_urlopen,
+        ):
+            client.complete(
+                "hello"
+            )
+
+        self.assertEqual(
+            seen["payload"]["max_tokens"],
+            16000,
+        )
 
     def test_response_size_is_bounded(
         self,
