@@ -1489,6 +1489,191 @@ def _cross_domain_pack_coverage(context: _InvariantContext) -> _CheckResult:
         )
     )
 
+def _weight_reconciliation(
+    context: _InvariantContext,
+) -> _CheckResult:
+    convention = " ".join(
+        context.config.conventions
+    ).lower()
+
+    explicit_sum_one = any(
+        phrase in convention
+        for phrase in (
+            "weights sum to one",
+            "weights sum to 1",
+        )
+    )
+
+    if not explicit_sum_one:
+        return _CheckResult(
+            skip_reason=(
+                "no explicit portfolio "
+                "weight target"
+            )
+        )
+
+    weight_column = (
+        context.columns.find(
+            "weight",
+            "portfolio_weight",
+            "asset_weight",
+        )
+    )
+
+    if weight_column is None:
+        return _CheckResult(
+            skip_reason=(
+                "no portfolio weight column"
+            )
+        )
+
+    weights = pd.to_numeric(
+        context.frame[
+            weight_column
+        ],
+        errors="coerce",
+    )
+
+    if weights.isna().any():
+        return _CheckResult(
+            evidence=(
+                _evidence(
+                    name=(
+                        "weight_reconciliation"
+                    ),
+                    passed=False,
+                    hard_failure=True,
+                    message=(
+                        "Portfolio weights "
+                        "are not numeric."
+                    ),
+                ),
+            )
+        )
+
+    grouping_columns: list[str] = []
+
+    for aliases in (
+        ("weight_set",),
+        (
+            "portfolio_id",
+            "portfolio",
+        ),
+        (
+            "date",
+            "timestamp",
+            "time",
+        ),
+        (
+            "scenario_id",
+            "scenario",
+        ),
+    ):
+        column = (
+            context.columns.find(
+                *aliases
+            )
+        )
+
+        if (
+            column is not None
+            and column
+            not in grouping_columns
+        ):
+            grouping_columns.append(
+                column
+            )
+
+    working = (
+        context.frame.copy()
+    )
+    working[
+        "__quant_weight"
+    ] = weights
+
+    if grouping_columns:
+        sums = working.groupby(
+            grouping_columns,
+            dropna=False,
+        )[
+            "__quant_weight"
+        ].sum()
+
+    else:
+        sums = pd.Series(
+            [weights.sum()],
+            index=["all_rows"],
+        )
+
+    target = 1.0
+
+    close = np.isclose(
+        sums.to_numpy(
+            dtype=float
+        ),
+        target,
+        atol=(
+            context.config
+            .absolute_tolerance
+        ),
+        rtol=(
+            context.config
+            .relative_tolerance
+        ),
+    )
+
+    passed = bool(
+        np.all(close)
+    )
+
+    actual_sums = [
+        float(value)
+        for value in sums
+    ]
+
+    details: dict[
+        str,
+        Any,
+    ] = {
+        "target": target,
+        "grouping_columns": (
+            grouping_columns
+        ),
+        "actual_sums": (
+            actual_sums
+        ),
+        "violation_count": int(
+            (~close).sum()
+        ),
+        "explicit_target": True,
+    }
+
+    if len(actual_sums) == 1:
+        details[
+            "actual_sum"
+        ] = actual_sums[0]
+
+    return _CheckResult(
+        evidence=(
+            _evidence(
+                name=(
+                    "weight_reconciliation"
+                ),
+                passed=passed,
+                hard_failure=True,
+                message=(
+                    "Portfolio weights "
+                    "reconcile to 1."
+                    if passed
+                    else
+                    "Portfolio weights "
+                    "do not reconcile "
+                    "to 1."
+                ),
+                details=details,
+            ),
+        )
+    )
 
 _CHECKS: tuple[_InvariantCheck, ...] = (
     _InvariantCheck(
@@ -1525,6 +1710,25 @@ _CHECKS: tuple[_InvariantCheck, ...] = (
         evaluator=_pnl_reconciliation,
         review_packs=frozenset({"accounting", "backtesting", "microstructure"}),
         categories=frozenset({"backtesting", "microstructure"}),
+    ),
+    _InvariantCheck(
+        name="weight_reconciliation",
+        evaluator=(
+            _weight_reconciliation
+        ),
+        review_packs=frozenset({
+            "accounting",
+            "backtesting",
+            "risk-management",
+            "factor-research",
+            "fixed-income",
+        }),
+        categories=frozenset({
+            "backtesting",
+            "risk-management",
+            "factor-research",
+            "fixed-income",
+        }),
     ),
     _InvariantCheck(
         name="option_greek_bounds",
@@ -1637,20 +1841,92 @@ def _json_to_frame(payload: Any) -> pd.DataFrame:
         return pd.DataFrame(payload)
 
     if isinstance(payload, dict):
+        # Explicit portfolio-weight maps must be handled before
+        # generic nested dictionaries.
+        weight_rows: list[dict[str, Any]] = []
+
+        scalar_fields = {
+            key: value
+            for key, value in payload.items()
+            if not isinstance(
+                value,
+                (dict, list),
+            )
+        }
+
+        for weight_key in (
+            "weights",
+            "stale_weights",
+            "rehedged_weights",
+        ):
+            weight_map = payload.get(weight_key)
+
+            if not isinstance(weight_map, dict):
+                continue
+
+            for instrument_id, weight in weight_map.items():
+                weight_rows.append(
+                    {
+                        **scalar_fields,
+                        "weight_set": weight_key,
+                        "instrument_id": instrument_id,
+                        "weight": weight,
+                    }
+                )
+
+        if weight_rows:
+            return pd.DataFrame(weight_rows)
+
         values = list(payload.values())
-        if values and all(isinstance(value, dict) for value in values):
-            key_sets = [set(value) for value in values]
-            if all(keys == key_sets[0] for keys in key_sets[1:]):
+
+        # Generic dictionary-of-dictionaries.
+        if values and all(
+            isinstance(value, dict)
+            for value in values
+        ):
+            key_sets = [
+                set(value)
+                for value in values
+            ]
+
+            if all(
+                keys == key_sets[0]
+                for keys in key_sets[1:]
+            ):
                 frame = pd.DataFrame(payload)
-                frame.insert(0, "key", frame.index.astype(str))
-                return frame.reset_index(drop=True)
-        if values and all(isinstance(value, list) for value in values):
-            lengths = {len(value) for value in values}
+
+                frame.insert(
+                    0,
+                    "key",
+                    frame.index.astype(str),
+                )
+
+                return frame.reset_index(
+                    drop=True
+                )
+
+        # Dictionary of equally sized lists.
+        if values and all(
+            isinstance(value, list)
+            for value in values
+        ):
+            lengths = {
+                len(value)
+                for value in values
+            }
+
             if len(lengths) == 1:
                 return pd.DataFrame(payload)
+
+        # Generic single JSON object.
         return pd.DataFrame([payload])
 
-    return pd.DataFrame({"value": [payload]})
+    # Scalar JSON value.
+    return pd.DataFrame(
+        {
+            "value": [payload]
+        }
+    )
 
 
 def _load_output(path: Path) -> pd.DataFrame:

@@ -734,6 +734,37 @@ def infer_numerical_risks(
 
     return risks
 
+def infer_conventions(
+    spec: TaskSpecification,
+) -> list[str]:
+    """
+    Extract only explicit deterministic conventions from
+    public task instructions.
+
+    Keep this conservative: do not infer portfolio constraints
+    from generic mentions of weights or portfolios.
+    """
+    text = re.sub(
+        r"\s+",
+        " ",
+        spec.instruction_text.lower(),
+    )
+
+    conventions: list[str] = []
+
+    if re.search(
+        (
+            r"\bweights?\s+"
+            r"(?:must\s+)?sum\s+to\s+"
+            r"(?:one|1(?:\.0+)?)\b"
+        ),
+        text,
+    ):
+        conventions.append(
+            "weights sum to one"
+        )
+
+    return conventions
 def compile_specification(
     spec: TaskSpecification,
 ) -> CompiledSpecification:
@@ -762,7 +793,7 @@ def compile_specification(
         ordering_rules=[],
 
         units={},
-        conventions=[],
+        conventions=infer_conventions(spec),
 
         edge_cases=infer_edge_cases(spec),
         invariants=infer_invariants(spec),
