@@ -1674,7 +1674,92 @@ def _weight_reconciliation(
             ),
         )
     )
+def _clean_dirty_reconciliation(
+    context: _InvariantContext,
+) -> _CheckResult:
+    values, error = _numeric_inputs(
+        context,
+        {
+            "clean_price": (
+                "clean_price",
+            ),
+            "dirty_price": (
+                "dirty_price",
+            ),
+            "accrued_interest": (
+                "accrued_interest",
+            ),
+        },
+    )
 
+    if values is None:
+        return _CheckResult(
+            skip_reason=error
+        )
+
+    expected = (
+        values["clean_price"]
+        + values["accrued_interest"]
+    )
+
+    actual = values["dirty_price"]
+
+    close = np.isclose(
+        actual,
+        expected,
+        atol=(
+            context.config
+            .absolute_tolerance
+        ),
+        rtol=(
+            context.config
+            .relative_tolerance
+        ),
+    )
+
+    difference = (
+        actual - expected
+    )
+
+    passed = bool(
+        np.all(close)
+    )
+
+    return _CheckResult(
+        evidence=(
+            _evidence(
+                name=(
+                    "clean_dirty_reconciliation"
+                ),
+                passed=passed,
+                hard_failure=True,
+                message=(
+                    "Dirty prices reconcile to "
+                    "clean price plus accrued interest."
+                    if passed
+                    else
+                    "Dirty prices do not reconcile "
+                    "to clean price plus accrued interest."
+                ),
+                details={
+                    **_bad_row_details(
+                        ~close
+                    ),
+                    "maximum_absolute_difference": (
+                        float(
+                            np.nanmax(
+                                np.abs(
+                                    difference
+                                )
+                            )
+                        )
+                        if len(difference)
+                        else 0.0
+                    ),
+                },
+            ),
+        )
+    )
 _CHECKS: tuple[_InvariantCheck, ...] = (
     _InvariantCheck(
         name="finite_numeric_values",
@@ -1754,6 +1839,15 @@ _CHECKS: tuple[_InvariantCheck, ...] = (
         name="dv01_duration_consistency",
         evaluator=_dv01_duration_consistency,
         categories=frozenset({"fixed-income"}),
+    ),
+    _InvariantCheck(
+        name="clean_dirty_reconciliation",
+        evaluator=(
+            _clean_dirty_reconciliation
+        ),
+        categories=frozenset({
+            "fixed-income",
+        }),
     ),
     _InvariantCheck(
         name="survival_probability_monotonicity",
