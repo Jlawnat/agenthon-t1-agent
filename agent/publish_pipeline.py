@@ -381,11 +381,15 @@ def run_publish_stage(
             reason
         )
 
-    parent = (
-        final_output_dir.parent
-    )
-
-    parent.mkdir(
+    # The official Agenthon runtime mounts /output and /app/output
+    # as writable directories while the parent filesystem (for example
+    # /app) is read-only.  Therefore staging cannot be created as a
+    # sibling of final_output_dir.  Keep all transient publication state
+    # inside the writable output mount itself.
+    #
+    # This preserves atomic replacement at the individual-file level and
+    # supports rollback, while avoiding writes to final_output_dir.parent.
+    final_output_dir.mkdir(
         parents=True,
         exist_ok=True,
     )
@@ -395,25 +399,32 @@ def run_publish_stage(
     )
 
     staging_dir = (
-        parent
-        / (
-            f".{final_output_dir.name}"
-            f".staging.{token}"
-        )
+        final_output_dir
+        / f".publish-staging.{token}"
     )
 
     backup_dir = (
-        parent
+        final_output_dir
+        / f".publish-backup.{token}"
+    )
+
+    # Phase 4.10 and the existing regression contract may leave a
+    # sibling backup from an interrupted run created by an older
+    # publisher.  We must detect it, but we never create new sibling
+    # state because the parent (for example /app) is read-only in the
+    # official runtime.
+    legacy_backup_dir = (
+        final_output_dir.parent
         / (
             f".{final_output_dir.name}"
             f".backup.{token}"
         )
     )
 
-    # A backup from an earlier interrupted promotion
-    # may contain the only valid previous output.
-    # Do not delete it here. Phase 4.10 must recover it.
-    if backup_dir.exists():
+    if (
+        backup_dir.exists()
+        or legacy_backup_dir.exists()
+    ):
         reason = (
             "Publish backup already exists; "
             "crash recovery is required "
@@ -429,25 +440,36 @@ def run_publish_stage(
             reason
         )
 
-    # An abandoned staging directory contains only an
-    # uncommitted copy, so it is safe to rebuild.
     if staging_dir.exists():
         _remove_directory(
             staging_dir
         )
 
-    replaced_existing = (
-        final_output_dir.exists()
+    # Treat publication as replacement of the complete output tree.
+    # Existing deliverables (including stale files from a prior run) are
+    # moved into an internal backup first, so the committed inventory can
+    # exactly match required_files while rollback can still restore the
+    # previous output.
+    existing_entries = tuple(
+        path
+        for path in final_output_dir.iterdir()
+        if path not in {
+            staging_dir,
+            backup_dir,
+        }
     )
 
-    old_output_moved = False
-    new_output_committed = False
+    replaced_existing = bool(
+        existing_entries
+    )
+
+    moved_backups: list[tuple[Path, Path]] = []
+    committed_paths: list[Path] = []
 
     try:
         # -------------------------------------------------
-        # 1. Build complete sibling staging directory.
+        # 1. Build a complete staging tree inside the writable mount.
         # -------------------------------------------------
-
         _copy_audited_files(
             source_dir=source_dir,
             staging_dir=staging_dir,
@@ -472,32 +494,68 @@ def run_publish_stage(
                 "the audited deliverables."
             )
 
-        # -------------------------------------------------
-        # 2. Move old final output aside.
-        # -------------------------------------------------
-
-        if replaced_existing:
-            os.replace(
-                final_output_dir,
-                backup_dir,
-            )
-
-            old_output_moved = True
-
-        # -------------------------------------------------
-        # 3. Atomic promotion.
-        # -------------------------------------------------
-
-        os.replace(
-            staging_dir,
-            final_output_dir,
+        backup_dir.mkdir(
+            parents=False,
+            exist_ok=False,
         )
 
-        new_output_committed = True
+        # -------------------------------------------------
+        # 2. Move the complete previous output aside.
+        #    Keep the staging and backup directories in place.
+        # -------------------------------------------------
+        for existing in existing_entries:
+            backup = (
+                backup_dir
+                / existing.name
+            )
+
+            os.replace(
+                existing,
+                backup,
+            )
+
+            moved_backups.append(
+                (backup, existing)
+            )
 
         # -------------------------------------------------
-        # 4. Verify committed inventory.
+        # 3. Promote each required staged file atomically.
         # -------------------------------------------------
+        for raw_relative in required_files:
+            relative = _safe_relative_path(
+                raw_relative
+            )
+
+            staged = staging_dir / relative
+            destination = final_output_dir / relative
+
+            destination.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            os.replace(
+                staged,
+                destination,
+            )
+
+            committed_paths.append(
+                destination
+            )
+
+        # -------------------------------------------------
+        # 4. Remove transient trees before validating the
+        #    committed output inventory.
+        # -------------------------------------------------
+        if staging_dir.exists():
+            _remove_directory(
+                staging_dir
+            )
+
+        if backup_dir.exists():
+            _remove_directory(
+                backup_dir
+            )
 
         committed_inventory = (
             _inventory(
@@ -515,43 +573,61 @@ def run_publish_stage(
                 "the audited deliverables."
             )
 
-        # -------------------------------------------------
-        # 5. Commit complete: old backup can go.
-        # -------------------------------------------------
-
-        if backup_dir.exists():
-            _remove_directory(
-                backup_dir
-            )
-
     except Exception as exc:
         # -------------------------------------------------
         # Best-effort synchronous rollback.
         # -------------------------------------------------
-
         try:
-            if (
-                new_output_committed
-                and final_output_dir.exists()
+            # Remove newly committed files first.  Clean up empty
+            # directories afterwards so restored prior directories can
+            # be moved back into their original locations.
+            for destination in reversed(
+                committed_paths
             ):
-                _remove_directory(
-                    final_output_dir
-                )
+                if (
+                    destination.exists()
+                    and _lstat_regular_file(
+                        destination
+                    )
+                ):
+                    destination.unlink()
 
-            if (
-                old_output_moved
-                and backup_dir.exists()
-                and not final_output_dir.exists()
+            # Remove empty parent directories created for nested
+            # deliverables, without ever removing final_output_dir.
+            for destination in reversed(
+                committed_paths
             ):
-                os.replace(
-                    backup_dir,
-                    final_output_dir,
-                )
+                parent = destination.parent
+
+                while (
+                    parent != final_output_dir
+                    and parent.exists()
+                ):
+                    try:
+                        parent.rmdir()
+                    except OSError:
+                        break
+
+                    parent = parent.parent
+
+            for backup, original in reversed(
+                moved_backups
+            ):
+                if backup.exists():
+                    os.replace(
+                        backup,
+                        original,
+                    )
 
         finally:
             if staging_dir.exists():
                 _remove_directory(
                     staging_dir
+                )
+
+            if backup_dir.exists():
+                _remove_directory(
+                    backup_dir
                 )
 
         reason = (

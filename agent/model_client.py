@@ -14,7 +14,7 @@ from typing import Any
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_REQUEST_BYTES = 8 * 1024 * 1024
 DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-DEFAULT_MAX_OUTPUT_TOKENS = 16000
+DEFAULT_MAX_OUTPUT_TOKENS = 4000
 MAX_ERROR_BODY_BYTES = 4096
 MAX_ENDPOINT_CHARS = 2048
 MAX_MODEL_NAME_CHARS = 256
@@ -160,6 +160,9 @@ class ModelClient:
             ],
             "temperature": temperature_value,
             "max_tokens": self.max_output_tokens,
+            "chat_template_kwargs": {
+                "enable_thinking": False,
+            },
         }
 
         body = json.dumps(

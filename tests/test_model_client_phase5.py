@@ -309,7 +309,7 @@ class ModelClientSecurityTests(
 
         self.assertEqual(
             seen["payload"]["max_tokens"],
-            16000,
+            4000,
         )
 
     def test_response_size_is_bounded(

@@ -407,23 +407,32 @@ def build_runtime_components(
                 enrichment_tokens
             )
 
-        enrichment = (
-            parse_spec_enrichment(
-                enrichment_response.text
+        try:
+            enrichment = (
+                parse_spec_enrichment(
+                    enrichment_response.text
+                )
             )
-        )
 
-        planning_specification = (
-            merge_specification(
-                deterministic_spec=(
-                    specification
-                ),
-                compiled_spec=(
-                    compiled_specification
-                ),
-                enrichment=enrichment,
+            planning_specification = (
+                merge_specification(
+                    deterministic_spec=(
+                        specification
+                    ),
+                    compiled_spec=(
+                        compiled_specification
+                    ),
+                    enrichment=enrichment,
+                )
             )
-        )
+
+        except (ValueError, TypeError, KeyError):
+            # Model enrichment is optional. A malformed structured
+            # response must not terminate the competition unit.
+            # Fall back to the deterministic compiled specification.
+            planning_specification = (
+                compiled_specification
+            )
 
         task_plan = build_task_plan(
             planning_specification
@@ -470,14 +479,21 @@ def build_runtime_components(
                 planner_tokens
             )
 
-        planner_output = (
-            parse_planner_output(
-                planner_response.text,
-                expected_candidates=(
-                    task_plan.candidate_count
-                ),
+        try:
+            planner_output = (
+                parse_planner_output(
+                    planner_response.text,
+                    expected_candidates=(
+                        task_plan.candidate_count
+                    ),
+                )
             )
-        )
+
+        except (ValueError, TypeError, KeyError):
+            # Planner structure is advisory. If the model returns an
+            # invalid structured plan, continue with the deterministic
+            # fallback strategies defined below instead of crashing.
+            planner_output = {}
 
         strategy_payloads = (
             _find_strategy_payloads(

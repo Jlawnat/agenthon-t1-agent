@@ -41,19 +41,44 @@ def _strip_code_fence(text: str) -> str:
     return text
 
 
+def _extract_json_object(
+    text: str,
+) -> dict[str, Any]:
+    """
+    Extract the first valid JSON object from a model response.
+
+    This tolerates harmless model wrappers such as explanatory
+    preambles, reasoning text, or Markdown code fences while
+    preserving the strict schema validation below.
+    """
+    cleaned = _strip_code_fence(text)
+
+    decoder = json.JSONDecoder()
+
+    for index, character in enumerate(cleaned):
+        if character != "{":
+            continue
+
+        try:
+            payload, _ = decoder.raw_decode(
+                cleaned[index:]
+            )
+        except json.JSONDecodeError:
+            continue
+
+        if isinstance(payload, dict):
+            return payload
+
+    raise ValueError(
+        "Specification model response "
+        "is not valid JSON."
+    )
+
+
 def parse_spec_enrichment(
     text: str,
 ) -> SpecificationEnrichment:
-    cleaned = _strip_code_fence(text)
-
-    try:
-        payload = json.loads(cleaned)
-
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "Specification model response "
-            "is not valid JSON."
-        ) from exc
+    payload = _extract_json_object(text)
 
     if not isinstance(payload, dict):
         raise ValueError(
