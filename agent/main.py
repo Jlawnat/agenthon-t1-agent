@@ -14,6 +14,7 @@ from agent.runtime_adapters import (
 _REQUIRED_RUNTIME_ENV = (
     "MODEL_ENDPOINT",
     "MODEL_NAME",
+    "MODEL_TOKEN",
     "QFBENCH_SEED",
 )
 

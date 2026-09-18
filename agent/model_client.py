@@ -43,6 +43,7 @@ class ModelClient:
         self,
         endpoint: str | None = None,
         model: str | None = None,
+        token: str | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         max_request_bytes: int = DEFAULT_MAX_REQUEST_BYTES,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
@@ -58,6 +59,12 @@ class ModelClient:
             model
             if model is not None
             else os.getenv("MODEL_NAME")
+        )
+
+        self.token = (
+            token
+            if token is not None
+            else os.getenv("MODEL_TOKEN")
         )
 
         self.timeout_seconds = self._positive_number(
@@ -118,6 +125,11 @@ class ModelClient:
                 "prompt must be a string."
             )
 
+        if not self.token:
+            raise RuntimeError(
+                "MODEL_TOKEN is not configured."
+            )
+
         temperature_value = self._temperature(
             temperature
         )
@@ -169,6 +181,7 @@ class ModelClient:
             headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json",
+                "Authorization": f"Bearer {self.token}",
             },
         )
 

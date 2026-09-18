@@ -125,6 +125,7 @@ class ModelClientSecurityTests(
         client = ModelClient(
             endpoint="https://example.test/v1",
             model="m",
+            token="test-token",
             timeout_seconds=10.0,
         )
 
@@ -173,6 +174,7 @@ class ModelClientSecurityTests(
         client = ModelClient(
             endpoint="https://example.test/v1",
             model="m",
+            token="test-token",
             timeout_seconds=120.0,
         )
 
@@ -199,7 +201,7 @@ class ModelClientSecurityTests(
             7.5,
         )
 
-    def test_request_contains_no_authorization_header(
+    def test_request_contains_authorization_header(
         self,
     ) -> None:
         body = json.dumps(
@@ -217,6 +219,7 @@ class ModelClientSecurityTests(
         client = ModelClient(
             endpoint="https://example.test/v1",
             model="m",
+            token="test-token",
         )
 
         seen = {}
@@ -240,10 +243,27 @@ class ModelClientSecurityTests(
                 "hello"
             )
 
-        self.assertNotIn(
-            "authorization",
-            seen["headers"],
+        self.assertEqual(
+            seen["headers"]["authorization"],
+            "Bearer test-token",
         )
+
+    def test_missing_model_token_fails_closed(
+        self,
+    ) -> None:
+        client = ModelClient(
+            endpoint="https://example.test/v1",
+            model="m",
+            token="",
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "MODEL_TOKEN is not configured",
+        ):
+            client.complete(
+                "hello"
+            )
     def test_request_caps_output_tokens(
         self,
     ) -> None:
@@ -262,6 +282,7 @@ class ModelClientSecurityTests(
         client = ModelClient(
             endpoint="https://example.test/v1",
             model="m",
+            token="test-token",
         )
 
         seen = {}
@@ -297,6 +318,7 @@ class ModelClientSecurityTests(
         client = ModelClient(
             endpoint="https://example.test/v1",
             model="m",
+            token="test-token",
             max_response_bytes=20,
         )
 
@@ -320,6 +342,7 @@ class ModelClientSecurityTests(
         client = ModelClient(
             endpoint="https://example.test/v1",
             model="m",
+            token="test-token",
         )
 
         with patch(
@@ -342,6 +365,7 @@ class ModelClientSecurityTests(
         client = ModelClient(
             endpoint="https://example.test/v1",
             model="m",
+            token="test-token",
         )
 
         error = urllib.error.HTTPError(
