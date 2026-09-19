@@ -173,6 +173,56 @@ def build_precision_guidance(
             ]
         )
 
+    if (
+        "historical" in text
+        and (
+            "value-at-risk" in text
+            or "value at risk" in text
+            or "historical var" in text
+        )
+        and (
+            "cleaning" in text
+            or "dirty" in text
+        )
+    ):
+        guidance.extend(
+            [
+                (
+                    "Treat the data-cleaning pipeline as ordered state "
+                    "transitions. Record each removal count at the moment "
+                    "that step runs on the rows still present, rather than "
+                    "recomputing counts from the final cleaned frame."
+                ),
+                (
+                    "Normalize dates before membership checks, use the "
+                    "task-supplied trading calendar rather than inventing "
+                    "one, and when duplicate dates are removed preserve the "
+                    "last occurrence in original source-file row order."
+                ),
+                (
+                    "Apply the stated outlier rule before listwise missing-"
+                    "value deletion. Make the outlier predicate NaN-safe so "
+                    "missing values are not accidentally counted as "
+                    "outliers, and do not forward-fill or use pairwise "
+                    "deletion when listwise deletion is required."
+                ),
+                (
+                    "For a daily-rebalanced equal-weight portfolio, compute "
+                    "each day's portfolio return from that day's cleaned "
+                    "asset returns. Use the exact requested percentile "
+                    "definition and interpolation/method, convert return "
+                    "quantiles to positive loss magnitudes only as stated, "
+                    "and do not annualize a daily VaR unless instructed."
+                ),
+                (
+                    "Identify the worst day from the same cleaned portfolio "
+                    "return series used for VaR, preserve an ISO zero-padded "
+                    "date string, and reconcile the reported clean "
+                    "observation count with the final cleaning-report count."
+                ),
+            ]
+        )
+
     return guidance
 
 

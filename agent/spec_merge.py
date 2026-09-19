@@ -96,10 +96,10 @@ def merge_specification(
         task_id=compiled_spec.task_id,
         category=compiled_spec.category,
 
-        difficulty=(
-            enrichment.difficulty
-            or compiled_spec.difficulty
-        ),
+        # Candidate-count/resource allocation is derived from the
+        # deterministic compiled specification. Model enrichment may
+        # enrich contract details but must not override that value.
+        difficulty=compiled_spec.difficulty,
 
         deliverables=_merge_deliverables(
             deterministic_paths=(

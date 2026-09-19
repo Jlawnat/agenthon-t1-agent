@@ -275,6 +275,62 @@ def _resolve_candidate_count(
     return default
 
 
+def _resolve_execution_timeout(
+    *,
+    requested_seconds: float,
+    run_context: Any,
+    candidate_count: int,
+) -> float:
+    # Expand the historical 120-second ceiling only when the task
+    # card has enough wall-clock budget. The executor still calls
+    # RunContext.bounded_timeout(), so the global deadline and safety
+    # margin remain authoritative.
+    if (
+        isinstance(candidate_count, bool)
+        or not isinstance(candidate_count, int)
+        or candidate_count <= 0
+    ):
+        raise ValueError(
+            "candidate_count must be a positive integer"
+        )
+
+    requested = float(
+        requested_seconds
+    )
+
+    if requested <= 0:
+        raise ValueError(
+            "requested_seconds must be positive"
+        )
+
+    card_timeout = float(
+        getattr(
+            run_context,
+            "card_timeout_seconds",
+            0.0,
+        )
+    )
+
+    if card_timeout <= 0:
+        return requested
+
+    adaptive_share = (
+        0.20
+        * card_timeout
+        / candidate_count
+    )
+
+    adaptive = min(
+        240.0,
+        adaptive_share,
+    )
+
+    return max(
+        requested,
+        adaptive,
+    )
+
+
 def solve_task(
     *,
     task_dir: Path,
@@ -431,6 +487,8 @@ def solve_task(
         },
     )
 
+    front_half: FrontHalfResult | None = None
+
     try:
 
         front_half = (
@@ -448,6 +506,34 @@ def solve_task(
             _resolve_candidate_count(
                 requested=candidate_count,
                 plan=front_half.plan,
+            )
+        )
+
+        resolved_execution_timeout = (
+            _resolve_execution_timeout(
+                requested_seconds=(
+                    execution_timeout_seconds
+                ),
+                run_context=(
+                    front_half
+                    .run_context
+                ),
+                candidate_count=(
+                    resolved_candidate_count
+                ),
+            )
+        )
+
+        resolved_audit_timeout = (
+            _resolve_execution_timeout(
+                requested_seconds=(
+                    audit_timeout_seconds
+                ),
+                run_context=(
+                    front_half
+                    .run_context
+                ),
+                candidate_count=1,
             )
         )
 
@@ -502,7 +588,7 @@ def solve_task(
                     resolved_candidate_count
                 ),
                 execution_timeout_seconds=(
-                    execution_timeout_seconds
+                    resolved_execution_timeout
                 ),
             )
         )
@@ -600,7 +686,7 @@ def solve_task(
                     repair_budget
                 ),
                 execution_timeout_seconds=(
-                    execution_timeout_seconds
+                    resolved_execution_timeout
                 ),
             )
         )
@@ -709,7 +795,7 @@ def solve_task(
                     .schema_expectations
                 ),
                 execution_timeout_seconds=(
-                    audit_timeout_seconds
+                    resolved_audit_timeout
                 ),
                 allow_quant_only_failures=True,
             )
@@ -854,6 +940,11 @@ def solve_task(
         try:
             journal.checkpoint(
                 state=state,
+                run_context=(
+                    front_half.run_context
+                    if front_half is not None
+                    else None
+                ),
                 extra={
                     "phase": (
                         "failed"

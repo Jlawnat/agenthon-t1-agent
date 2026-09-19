@@ -765,6 +765,45 @@ def infer_conventions(
         )
 
     return conventions
+def resolve_difficulty(
+    spec: TaskSpecification,
+) -> str:
+    # Prefer a valid task-card difficulty because this value controls
+    # candidate-count/resource allocation. Older fixtures without it
+    # fall back to the existing deterministic text heuristic.
+    raw_card = (
+        spec.raw_card
+        if isinstance(spec.raw_card, dict)
+        else {}
+    )
+
+    metadata = raw_card.get(
+        "metadata",
+        {},
+    )
+
+    if isinstance(metadata, dict):
+        declared = metadata.get(
+            "difficulty"
+        )
+
+        if isinstance(declared, str):
+            normalized = (
+                declared
+                .strip()
+                .lower()
+            )
+
+            if normalized in {
+                "easy",
+                "medium",
+                "hard",
+            }:
+                return normalized
+
+    return infer_difficulty(spec)
+
+
 def compile_specification(
     spec: TaskSpecification,
 ) -> CompiledSpecification:
@@ -785,7 +824,7 @@ def compile_specification(
     return CompiledSpecification(
         task_id=spec.task_id,
         category=spec.category,
-        difficulty=infer_difficulty(spec),
+        difficulty=resolve_difficulty(spec),
 
         deliverables=deliverables,
         required_columns=spec.required_output_columns,
