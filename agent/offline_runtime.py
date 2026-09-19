@@ -9,6 +9,10 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 
+from agent.offline_bollinger import (
+    BollingerBacktestSkill,
+)
+
 
 class OfflineSkill(Protocol):
     name: str
@@ -546,6 +550,7 @@ class BlackScholesGreeksSkill:
 
 _SKILLS: tuple[OfflineSkill, ...] = (
     BlackScholesGreeksSkill(),
+    BollingerBacktestSkill(),
 )
 
 
