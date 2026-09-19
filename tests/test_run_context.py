@@ -242,7 +242,7 @@ print(os.environ["PYTHONHASHSEED"])
 
         self.assertEqual(
             context.budget.max_model_calls,
-            6,
+            12,
         )
 
 

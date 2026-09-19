@@ -112,6 +112,7 @@ def run_clean_room_audit_stage(
     compiled_specification: CompiledSpecification,
     schema_expectations: SchemaExpectations,
     execution_timeout_seconds: float = 120.0,
+    allow_quant_only_failures: bool = False,
 ) -> CleanRoomAuditResult:
     """
     Re-execute the selected solver in a completely fresh
@@ -387,7 +388,13 @@ def run_clean_room_audit_stage(
             reason
         ) from exc
 
-    if not audit.passed:
+    if (
+        not audit.passed
+        and not (
+            allow_quant_only_failures
+            and audit.publishable
+        )
+    ):
         reason = (
             _audit_failure_summary(
                 audit

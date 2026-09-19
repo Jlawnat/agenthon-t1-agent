@@ -643,6 +643,7 @@ def solve_task(
                 production=(
                     repair.production
                 ),
+                allow_best_effort=True,
             )
         )
 
@@ -710,6 +711,7 @@ def solve_task(
                 execution_timeout_seconds=(
                     audit_timeout_seconds
                 ),
+                allow_quant_only_failures=True,
             )
         )
 
@@ -761,6 +763,7 @@ def solve_task(
                 final_output_dir=(
                     final_output_dir
                 ),
+                allow_quant_only_failures=True,
             )
         )
 

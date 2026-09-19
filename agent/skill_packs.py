@@ -68,6 +68,8 @@ SKILL_PACKS: dict[str, SkillPack] = {
             "for implied volatility calibration, solve the pricing residual with a bounded or bracketed root method and reject prices outside valid arbitrage bounds",
             "for binomial trees or finite difference PDE methods, verify terminal and boundary conditions and check grid or timestep convergence",
             "for Monte Carlo pricing, use an explicit seed, report or estimate sampling error, and check convergence as path count increases",
+            "for discrete delta hedging, treat financing, dividends, rebalancing, transaction costs, and terminal settlement as an explicit ordered cashflow ledger",
+            "for multi-asset exchange/spread options, validate the zero-strike spread limit against the corresponding exchange-option identity when assumptions match",
             "use variance reduction in Monte Carlo when it materially improves precision without changing the estimator target",
         ],
         guidance=[
@@ -167,6 +169,8 @@ SKILL_PACKS: dict[str, SkillPack] = {
             "for information coefficient (IC), align factor values with future returns at the intended horizon and verify the correlation statistic and sign convention",
             "for long-short or neutral portfolios, reconcile long and short weights and check dollar-neutral, beta-neutral, or other declared neutrality constraints",
             "check portfolio weights, leverage, and concentration after ranking, winsorization, normalization, and missing-data filters",
+            "for event studies, derive relative days from aligned trading-day indices, keep estimation and event windows non-overlapping, and exclude events with incomplete required windows",
+            "for standardized event-study tests, preserve the stated event-specific prediction-error correction and any cross-sectional dependence adjustment rather than substituting a simpler t-test",
         ],
         guidance=[
             "avoid random cross-validation for time-dependent research",
@@ -210,6 +214,8 @@ SKILL_PACKS: dict[str, SkillPack] = {
             "check covariance and correlation matrices for symmetry, finite entries, valid diagonals, and positive-semidefinite behavior where required",
             "for linear portfolio risk, reconcile portfolio variance with w^T Sigma w under the stated exposure convention",
             "distinguish historical, parametric, and Monte Carlo risk estimates and validate horizon scaling assumptions rather than applying square-root-of-time blindly",
+            "for FFT aggregate-loss methods, verify probability-mass normalization, tail-grid coverage, transform orientation, monotone CDF construction, and wrap-around aliasing control",
+            "for compound-loss Monte Carlo, preserve the count/severity model, requested seed and simulation count, and use bounded-memory aggregation when total claim draws are large",
         ],
         guidance=[
             "keep confidence level and horizon explicit",

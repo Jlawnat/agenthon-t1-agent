@@ -77,6 +77,57 @@ def _bounded_error(exc: Exception | str) -> str:
     return text[:985] + "...[truncated]"
 
 
+def _attempt_quality_key(
+    attempt: CandidateAttempt,
+) -> tuple[int, int, int, int]:
+    """Lower is better; repairs must strictly improve this key."""
+    admissible_penalty = (
+        0
+        if (
+            not attempt.timed_out
+            and attempt.return_code == 0
+        )
+        else 1
+    )
+
+    structural_hard_failures = sum(
+        1
+        for item in attempt.structural_evidence
+        if (
+            item.status == "fail"
+            and item.severity == "hard_fail"
+        )
+    )
+
+    quant_hard_failures = sum(
+        1
+        for item in attempt.quant_evidence
+        if (
+            item.status == "fail"
+            and item.severity == "hard_fail"
+        )
+    )
+
+    warnings = sum(
+        1
+        for item in (
+            attempt.structural_evidence
+            + attempt.quant_evidence
+        )
+        if (
+            item.status == "warning"
+            or item.severity == "warning"
+        )
+    )
+
+    return (
+        admissible_penalty,
+        structural_hard_failures,
+        quant_hard_failures,
+        warnings,
+    )
+
+
 def _code_validation_attempt(
     *,
     item: CandidateProductionItem,
@@ -192,9 +243,9 @@ def run_targeted_repair_stage(
     if repair_budget is None:
         repair_budget = RepairBudget(
             max_attempts=3,
-            max_total_tokens=6000,
+            max_total_tokens=12000,
             max_wall_seconds=min(
-                120.0,
+                240.0,
                 run_context.budget.usable_remaining_seconds,
             ),
         )
@@ -245,6 +296,31 @@ def run_targeted_repair_stage(
             skipped.append(candidate_id)
             failures[candidate_id] = "No candidate source code was available for repair."
             continue
+
+        source_attempt_count = len(
+            candidate.attempts
+        )
+        source_status = (
+            candidate.current_status
+        )
+        source_hard_failures = list(
+            candidate.hard_failures
+        )
+        source_warnings = list(
+            candidate.warnings
+        )
+        source_validated_code = (
+            item.validated_code
+        )
+        source_workspace = (
+            item.workspace
+        )
+        source_solver_path = (
+            item.solver_path
+        )
+        source_execution = (
+            item.execution
+        )
 
         if not repair_budget.can_reserve():
             skipped.append(candidate_id)
@@ -423,6 +499,54 @@ def run_targeted_repair_stage(
                 "Repaired candidate evaluation failed."
             ]
             failures[candidate_id] = _bounded_error(exc)
+            continue
+
+        repaired_attempt = (
+            candidate.latest_attempt()
+        )
+
+        if (
+            repaired_attempt is not None
+            and _attempt_quality_key(
+                repaired_attempt
+            )
+            >= _attempt_quality_key(
+                source_attempt
+            )
+        ):
+            # A repair is advisory. If it is not strictly better,
+            # restore the previous candidate and its execution artifacts.
+            del candidate.attempts[
+                source_attempt_count:
+            ]
+
+            candidate.current_status = (
+                source_status
+            )
+            candidate.hard_failures = (
+                source_hard_failures
+            )
+            candidate.warnings = (
+                source_warnings
+            )
+
+            item.validated_code = (
+                source_validated_code
+            )
+            item.workspace = (
+                source_workspace
+            )
+            item.solver_path = (
+                source_solver_path
+            )
+            item.execution = (
+                source_execution
+            )
+
+            failures[candidate_id] = (
+                "Repair was not a strict improvement; "
+                "restored the previous candidate attempt."
+            )
             continue
 
         if candidate.current_status == "validated":

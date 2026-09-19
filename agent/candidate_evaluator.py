@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from agent.candidate_contract import (
     CandidateRecord,
@@ -38,6 +38,36 @@ def _has_hard_failure(
         and item.status == "fail"
         for item in all_evidence
     )
+
+
+def _normalise_required_output_path(
+    raw_path: str,
+) -> str:
+    path = str(raw_path).replace("\\", "/").strip()
+
+    for prefix in (
+        "/app/output/",
+        "/output/",
+    ):
+        if path.startswith(prefix):
+            path = path[len(prefix):]
+            break
+
+    if path.startswith("output/"):
+        path = path[len("output/"):]
+
+    pure = PurePosixPath(path)
+
+    if (
+        not path
+        or pure.is_absolute()
+        or any(part in {"", ".", ".."} for part in pure.parts)
+    ):
+        raise ValueError(
+            f"Unsafe required output path: {raw_path!r}"
+        )
+
+    return pure.as_posix()
 
 
 def _collect_messages(
@@ -91,9 +121,27 @@ def evaluate_collected_attempt(
     execution evidence.
     """
 
+    normalised_paths = [
+        _normalise_required_output_path(path)
+        for path in required_output_paths
+    ]
+
+    single_output = (
+        len(normalised_paths) == 1
+    )
+
+    single_tabular_output = (
+        single_output
+        and Path(normalised_paths[0]).suffix.lower()
+        in {".csv", ".parquet", ".feather"}
+    )
+
     quant_config = None
 
-    if compiled_specification is not None:
+    if (
+        compiled_specification is not None
+        and single_output
+    ):
         quant_config = (
             QuantInvariantConfig
             .from_compiled_specification(
@@ -101,39 +149,44 @@ def evaluate_collected_attempt(
             )
         )
 
-    for required_path in required_output_paths:
-        output_name = Path(
-            required_path
-        ).name
-
+    for required_path in normalised_paths:
         actual_output = (
             output_dir
-            / output_name
+            / required_path
         )
 
         structural_evidence = (
             verify_structural_output(
                 output_path=actual_output,
-                required_columns=required_columns,
+                required_columns=(
+                    required_columns
+                    if single_tabular_output
+                    else []
+                ),
                 expected_rows=(
-                    schema_expectations
-                    .expected_rows
+                    schema_expectations.expected_rows
+                    if single_tabular_output
+                    else None
                 ),
                 id_column=(
-                    schema_expectations
-                    .id_column
+                    schema_expectations.id_column
+                    if single_tabular_output
+                    else None
                 ),
                 expected_ids=(
-                    schema_expectations
-                    .expected_ids
+                    schema_expectations.expected_ids
+                    if single_tabular_output
+                    else None
                 ),
                 require_id_order=(
-                    schema_expectations
-                    .require_id_order
+                    schema_expectations.require_id_order
+                    if single_tabular_output
+                    else False
                 ),
                 expected_dtypes=(
-                    schema_expectations
-                    .expected_dtypes
+                    schema_expectations.expected_dtypes
+                    if single_tabular_output
+                    else {}
                 ),
             )
         )

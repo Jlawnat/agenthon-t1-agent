@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from agent.candidate_contract import (
@@ -45,6 +45,36 @@ def _file_metadata(
         }
 
     return metadata
+
+
+def _normalise_required_output_path(
+    raw_path: str,
+) -> str:
+    path = str(raw_path).replace("\\", "/").strip()
+
+    for prefix in (
+        "/app/output/",
+        "/output/",
+    ):
+        if path.startswith(prefix):
+            path = path[len(prefix):]
+            break
+
+    if path.startswith("output/"):
+        path = path[len("output/"):]
+
+    pure = PurePosixPath(path)
+
+    if (
+        not path
+        or pure.is_absolute()
+        or any(part in {"", ".", ".."} for part in pure.parts)
+    ):
+        raise ValueError(
+            f"Unsafe required output path: {raw_path!r}"
+        )
+
+    return pure.as_posix()
 
 
 def collect_execution_evidence(
@@ -117,17 +147,14 @@ def collect_execution_evidence(
     # ---------------------------------------------------------
     # Required output files
     # ---------------------------------------------------------
-    required_names: list[str] = []
+    required_names = [
+        _normalise_required_output_path(path)
+        for path in required_output_paths
+    ]
 
-    for path in required_output_paths:
-        required_names.append(
-            Path(path).name
-        )
-
-    produced_names = {
-        Path(path).name
-        for path in produced_files
-    }
+    produced_names = set(
+        produced_files
+    )
 
     missing = [
         name
@@ -165,11 +192,14 @@ def collect_execution_evidence(
     # ---------------------------------------------------------
     # Unexpected output files
     # ---------------------------------------------------------
+    required_name_set = set(
+        required_names
+    )
+
     unexpected = [
         path
         for path in produced_files
-        if Path(path).name
-        not in set(required_names)
+        if path not in required_name_set
     ]
 
     if unexpected:

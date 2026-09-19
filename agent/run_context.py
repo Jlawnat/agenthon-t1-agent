@@ -43,7 +43,7 @@ class RunContext:
         ),
         safety_margin_seconds: float = 5.0,
         max_candidate_attempts: int = 6,
-        max_model_calls: int = 6,
+        max_model_calls: int = 12,
         max_total_tokens: int | None = None,
     ) -> "RunContext":
 

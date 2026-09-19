@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 
 
 _FORBIDDEN_TEXT_FRAGMENTS = (
@@ -65,19 +66,32 @@ _FORBIDDEN_ASYNCIO_CALLS = {
 
 
 def clean_model_code(text: str) -> str:
-    code = text.strip()
+    # Recover executable Python from common model wrappers.
+    code = str(text).strip()
 
-    if code.startswith("```"):
+    code = re.sub(
+        r"(?is)<think>.*?</think>",
+        "",
+        code,
+    ).strip()
+
+    fenced = re.findall(
+        r"```(?:python|py)?\s*\n?(.*?)```",
+        code,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    if fenced:
+        code = max(
+            fenced,
+            key=len,
+        ).strip()
+
+    elif code.startswith("```"):
         lines = code.splitlines()
 
         if lines:
             lines = lines[1:]
-
-        if (
-            lines
-            and lines[-1].strip() == "```"
-        ):
-            lines = lines[:-1]
 
         code = "\n".join(lines).strip()
 

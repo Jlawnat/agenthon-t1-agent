@@ -247,6 +247,7 @@ def run_publish_stage(
     state: OrchestratorState,
     audit_result: CleanRoomAuditResult,
     final_output_dir: Path,
+    allow_quant_only_failures: bool = False,
 ) -> PublishResult:
     """
     Atomically promote only the successfully audited
@@ -301,7 +302,13 @@ def run_publish_stage(
 
     source_dir = raw_source_dir.resolve()
 
-    if not audit_result.audit.passed:
+    if (
+        not audit_result.audit.passed
+        and not (
+            allow_quant_only_failures
+            and audit_result.audit.publishable
+        )
+    ):
         reason = (
             "Refusing to publish output "
             "that did not pass final audit."

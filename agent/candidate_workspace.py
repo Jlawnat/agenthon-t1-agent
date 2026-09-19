@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import os
+import shlex
 import shutil
 import stat
 
@@ -53,14 +54,7 @@ def _reject_symlinks(
 def _make_input_read_only(
     root: Path,
 ) -> None:
-    """
-    Remove write bits from the copied input tree.
-
-    The candidate executor additionally blocks Python-level
-    writes outside output/temp/home. The official container
-    read-only task mount remains the outer security boundary.
-    """
-
+    """Remove write bits from a copied task-data tree."""
     if not root.exists():
         return
 
@@ -105,6 +99,311 @@ def _make_input_read_only(
         )
         | stat.S_IXUSR
     )
+
+
+def _task_data_is_effectively_read_only(
+    root: Path,
+) -> bool:
+    """
+    Return True when the task-data tree is safe to expose zero-copy.
+
+    The official Agenthon runtime mounts /input read-only. We also
+    accept a tree that is not writable by the current process.
+    Otherwise we fall back to the original copy-and-chmod behavior,
+    preserving the candidate-workspace security invariant in local
+    development and tests.
+    """
+    try:
+        flags = os.statvfs(root).f_flag
+        if flags & getattr(os, "ST_RDONLY", 1):
+            return True
+    except OSError:
+        pass
+
+    try:
+        if os.access(root, os.W_OK):
+            return False
+
+        for current_root, dirs, files in os.walk(
+            root,
+            topdown=True,
+            followlinks=False,
+        ):
+            current = Path(current_root)
+
+            if os.access(current, os.W_OK):
+                return False
+
+            for name in list(dirs) + list(files):
+                path = current / name
+
+                if os.access(path, os.W_OK):
+                    return False
+
+    except OSError:
+        return False
+
+    return True
+
+
+def _normalise_copy_source(
+    value: str,
+) -> Path | None:
+    raw = value.strip()
+
+    while raw.startswith("./"):
+        raw = raw[2:]
+
+    if raw in {"data", "data/"}:
+        return None
+
+    if not raw.startswith("data/"):
+        return None
+
+    rel = Path(
+        raw[len("data/"):]
+    )
+
+    if (
+        not rel.parts
+        or rel.is_absolute()
+        or ".." in rel.parts
+    ):
+        return None
+
+    return rel
+
+
+def _normalise_copy_destination(
+    value: str,
+    *,
+    source_rel: Path,
+) -> Path | None:
+    raw = value.strip()
+
+    if not raw.startswith("/app"):
+        return None
+
+    is_directory = raw.endswith("/")
+
+    if raw == "/app":
+        is_directory = True
+        relative = ""
+    elif raw == "/app/data":
+        is_directory = True
+        relative = ""
+    elif raw.startswith("/app/data/"):
+        relative = raw[len("/app/data/"):]
+    elif raw.startswith("/app/"):
+        relative = raw[len("/app/"):]
+    else:
+        return None
+
+    if is_directory:
+        prefix = (
+            relative.rstrip("/") + "/"
+            if relative
+            else ""
+        )
+        relative = (
+            prefix
+            + source_rel.name
+        )
+
+    rel = Path(relative)
+
+    if (
+        not rel.parts
+        or rel.is_absolute()
+        or ".." in rel.parts
+    ):
+        return None
+
+    return rel
+
+
+def _legacy_copy_aliases(
+    *,
+    task_dir: Path,
+    environment_data: Path,
+) -> dict[Path, Path]:
+    dockerfile = (
+        task_dir
+        / "environment"
+        / "Dockerfile"
+    )
+
+    if not dockerfile.exists():
+        return {}
+
+    aliases: dict[Path, Path] = {}
+
+    try:
+        lines = dockerfile.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines()
+    except OSError:
+        return {}
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+
+        if (
+            not stripped
+            or not stripped.upper().startswith("COPY ")
+        ):
+            continue
+
+        parts = stripped.split()
+
+        if (
+            len(parts) != 3
+            or parts[0].upper() != "COPY"
+        ):
+            continue
+
+        source_rel = (
+            _normalise_copy_source(
+                parts[1]
+            )
+        )
+
+        if source_rel is None:
+            continue
+
+        source = (
+            environment_data
+            / source_rel
+        )
+
+        if (
+            not source.exists()
+            or not source.is_file()
+        ):
+            continue
+
+        alias_rel = (
+            _normalise_copy_destination(
+                parts[2],
+                source_rel=source_rel,
+            )
+        )
+
+        if alias_rel is None:
+            continue
+
+        aliases[alias_rel] = (
+            source_rel
+        )
+
+    return aliases
+
+
+def _stage_zero_copy_tree(
+    *,
+    environment_data: Path,
+    candidate_data: Path,
+) -> None:
+    candidate_data.mkdir(
+        parents=False,
+        exist_ok=False,
+    )
+
+    for source in sorted(
+        environment_data.rglob("*")
+    ):
+        rel = (
+            source.relative_to(
+                environment_data
+            )
+        )
+        destination = (
+            candidate_data
+            / rel
+        )
+
+        if source.is_dir():
+            destination.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+            continue
+
+        if not source.is_file():
+            raise CandidateWorkspaceError(
+                "Task data contains an unsupported filesystem entry: "
+                f"{rel}"
+            )
+
+        destination.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        destination.symlink_to(
+            source.resolve()
+        )
+
+
+def _apply_legacy_copy_aliases(
+    *,
+    task_dir: Path,
+    environment_data: Path,
+    candidate_data: Path,
+    source_root: Path,
+) -> None:
+    aliases = (
+        _legacy_copy_aliases(
+            task_dir=task_dir,
+            environment_data=environment_data,
+        )
+    )
+
+    for alias_rel, source_rel in aliases.items():
+        if alias_rel == source_rel:
+            continue
+
+        alias = (
+            candidate_data
+            / alias_rel
+        )
+        source = (
+            source_root
+            / source_rel
+        )
+
+        if not source.exists():
+            raise CandidateWorkspaceError(
+                "Dockerfile data alias source is missing: "
+                f"{source_rel}"
+            )
+
+        if (
+            alias.exists()
+            or alias.is_symlink()
+        ):
+            try:
+                if (
+                    alias.is_symlink()
+                    and alias.resolve()
+                    == source.resolve()
+                ):
+                    continue
+            except OSError:
+                pass
+
+            raise CandidateWorkspaceError(
+                "Dockerfile data alias conflicts with an existing "
+                f"candidate-data path: {alias_rel}"
+            )
+
+        alias.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        alias.symlink_to(
+            source.resolve()
+        )
 
 
 def _is_within(
@@ -218,6 +517,11 @@ class CandidateWorkspace:
             / "data"
         )
 
+        candidate_data = (
+            input_dir
+            / "data"
+        )
+
         if environment_data.exists():
             if not environment_data.is_dir():
                 raise CandidateWorkspaceError(
@@ -228,20 +532,47 @@ class CandidateWorkspace:
                 environment_data
             )
 
-            copied_data = (
-                input_dir
-                / "data"
+            if _task_data_is_effectively_read_only(
+                environment_data
+            ):
+                _stage_zero_copy_tree(
+                    environment_data=environment_data,
+                    candidate_data=candidate_data,
+                )
+
+                alias_source_root = (
+                    environment_data
+                )
+            else:
+                shutil.copytree(
+                    environment_data,
+                    candidate_data,
+                    dirs_exist_ok=False,
+                    symlinks=False,
+                )
+
+                _make_input_read_only(
+                    candidate_data
+                )
+
+                alias_source_root = (
+                    candidate_data
+                )
+
+            _apply_legacy_copy_aliases(
+                task_dir=task_dir,
+                environment_data=environment_data,
+                candidate_data=candidate_data,
+                source_root=alias_source_root,
             )
 
-            shutil.copytree(
-                environment_data,
-                copied_data,
-                dirs_exist_ok=False,
-                symlinks=False,
-            )
-
-            _make_input_read_only(
-                copied_data
+        else:
+            # Parameter-only tasks are valid Track-1 units. Keep the
+            # candidate input contract stable even when no data files
+            # are shipped by exposing an empty INPUT_DIR/data directory.
+            candidate_data.mkdir(
+                parents=False,
+                exist_ok=False,
             )
 
         return cls(

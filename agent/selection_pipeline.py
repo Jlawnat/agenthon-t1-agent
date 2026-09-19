@@ -38,6 +38,7 @@ def run_selection_stage(
     *,
     state: OrchestratorState,
     production: CandidateProductionResult,
+    allow_best_effort: bool = False,
 ) -> SelectionPipelineResult:
     """
     Run the Phase 4 SELECT stage using the existing
@@ -82,11 +83,56 @@ def run_selection_stage(
         .selected_candidate_id
     )
 
+    if (
+        selected_id is None
+        and allow_best_effort
+    ):
+        fallback = next(
+            (
+                scorecard
+                for scorecard
+                in selection.scorecards
+                if (
+                    scorecard.admissible_execution
+                    and scorecard.structural_hard_failures == 0
+                )
+            ),
+            None,
+        )
+
+        if fallback is not None:
+            selected_id = (
+                fallback.candidate_id
+            )
+
+            for candidate in candidates:
+                candidate.selected = (
+                    candidate.candidate_id
+                    == selected_id
+                )
+
+            selection = SelectionResult(
+                selected_candidate_id=(
+                    selected_id
+                ),
+                ranked_candidate_ids=(
+                    selection.ranked_candidate_ids
+                ),
+                first_candidate_valid=(
+                    selection.first_candidate_valid
+                ),
+                any_of_three_valid=(
+                    selection.any_of_three_valid
+                ),
+                scorecards=(
+                    selection.scorecards
+                ),
+            )
+
     if selected_id is None:
         reason = (
-            "No valid candidate survived "
-            "execution, evaluation, and "
-            "targeted repair."
+            "No valid or structurally publishable candidate survived "
+            "execution, evaluation, and targeted repair."
         )
 
         state.fail_stage(

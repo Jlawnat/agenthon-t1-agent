@@ -124,8 +124,15 @@ def infer_schema_expectations(
             break
 
     if id_column is None:
+        # Do not infer output row count merely because there is exactly
+        # one tabular input. Many finance tasks transform a large input
+        # panel into a smaller aggregate/backtest/summary output.
+        #
+        # Row-count inference is safe only when an explicit identifier
+        # column is shared by input and output, letting us establish
+        # one-output-row-per-input-identifier semantics.
         return SchemaExpectations(
-            expected_rows=expected_rows,
+            expected_rows=None,
             id_column=None,
             expected_ids=None,
             require_id_order=False,

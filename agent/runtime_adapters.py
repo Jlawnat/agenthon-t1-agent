@@ -8,7 +8,10 @@ from agent.candidate_production import (
     GeneratedCandidate,
     GeneratorAdapter,
 )
-from agent.candidate_prompt import build_candidate_prompt
+from agent.candidate_prompt import (
+    build_candidate_prompt,
+    build_precision_guidance,
+)
 from agent.compiled_specification import CompiledSpecification
 from agent.front_half import FrontHalfDependencies
 from agent.model_client import ModelClient, ModelResponse
@@ -64,9 +67,9 @@ def _response_tokens(
         return 0
 
     for key in (
-        "total_tokens",
         "output_tokens",
         "completion_tokens",
+        "total_tokens",
     ):
         value = usage.get(key)
 
@@ -283,6 +286,9 @@ def _build_repair_prompt(
         "candidate_id": request.candidate_id,
         "candidate_seed": request.candidate_seed,
         "repair_brief": request.brief.to_dict(),
+        "precision_guidance": build_precision_guidance(
+            request.specification.instruction_text
+        ),
         "source_code": request.source_code,
     }
 

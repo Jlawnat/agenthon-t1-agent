@@ -8,6 +8,174 @@ from agent.planner import CandidateStrategy
 from agent.skill_packs import SkillPack
 
 
+def build_precision_guidance(
+    instruction_text: str,
+) -> list[str]:
+    # High-value finance implementation reminders triggered by task semantics.
+    text = str(instruction_text).lower()
+    guidance: list[str] = []
+
+    if (
+        "delta" in text
+        and "hedg" in text
+        and (
+            "transaction cost" in text
+            or "dividend" in text
+        )
+    ):
+        guidance.extend(
+            [
+                (
+                    "Discrete hedging is an event-ordering problem: "
+                    "implement the task's stated daily sequence literally "
+                    "(financing, dividend cashflow, then rebalance when "
+                    "applicable) and use the position carried from the "
+                    "previous close for any ex-dividend credit."
+                ),
+                (
+                    "Separate initial trade, intermediate rebalances, and "
+                    "terminal liquidation. Apply direction-specific costs "
+                    "to the signed share change, count only the rebalances "
+                    "the task asks to count, and settle the option payoff "
+                    "only after the specified terminal stock liquidation."
+                ),
+                (
+                    "When pricing with known discrete dividends, subtract "
+                    "only the present value of dividends still remaining at "
+                    "that valuation time; use the current valuation day's "
+                    "volatility and the task's exact time-to-expiry."
+                ),
+                (
+                    "Reconcile terminal cash from option premium, stock "
+                    "trades, financing, dividends, transaction costs, and "
+                    "option settlement as a signed P&L identity."
+                ),
+            ]
+        )
+
+    if (
+        (
+            "event study" in text
+            or "event-study" in text
+        )
+        and (
+            "abnormal return" in text
+            or "market model" in text
+        )
+    ):
+        guidance.extend(
+            [
+                (
+                    "Event-window offsets are trading-day positions in the "
+                    "aligned return series, not calendar-day arithmetic. "
+                    "Build one date-aligned stock/market return frame first "
+                    "and derive estimation/event windows from its indices."
+                ),
+                (
+                    "Fit the market model with an intercept independently "
+                    "for each valid event, keep the estimation and event "
+                    "windows non-overlapping exactly as specified, and skip "
+                    "events rather than padding an incomplete event window."
+                ),
+                (
+                    "For Patell/BMP-style standardisation, include the full "
+                    "prediction-error correction from the event's own "
+                    "estimation sample before cross-sectional aggregation."
+                ),
+                (
+                    "For dependence adjustment, estimate pairwise residual "
+                    "correlations only on overlapping estimation dates that "
+                    "meet the task's minimum-overlap rule, then apply the "
+                    "stated cross-sectional scaling exactly once."
+                ),
+                (
+                    "For rank tests, pool the observations the definition "
+                    "requires before ranking; do not replace a generalized "
+                    "rank statistic with a t-test or a simple rank-sum "
+                    "shortcut."
+                ),
+            ]
+        )
+
+    if (
+        "compound poisson" in text
+        and "fft" in text
+    ):
+        guidance.extend(
+            [
+                (
+                    "For a compound-Poisson aggregate, construct a valid "
+                    "discrete severity probability mass on the loss grid, "
+                    "then use the compound transform exp(lambda*(phi_X-1)); "
+                    "ensure the FFT/inverse-FFT sign and ordering conventions "
+                    "are consistent with that grid."
+                ),
+                (
+                    "Choose the grid spacing/range to control wrap-around "
+                    "aliasing at the tail coverage required by the task; "
+                    "after inversion, handle only tiny numerical negatives "
+                    "carefully and verify total probability is approximately "
+                    "one and the CDF is nondecreasing."
+                ),
+                (
+                    "Respect each severity distribution's support and "
+                    "parameterisation when discretising; preserve any mass "
+                    "near zero implied by the aggregate count process."
+                ),
+                (
+                    "For Monte Carlo compound loss, use the exact requested "
+                    "seed and simulation count. Avoid materialising an "
+                    "unbounded claims-by-path matrix; aggregate claims by "
+                    "counts or bounded chunks while preserving the estimator."
+                ),
+                (
+                    "Use the task's exact VaR quantile definition and its "
+                    "stated ES tail condition. Keep loss/return sign "
+                    "conventions consistent when comparing FFT and MC."
+                ),
+            ]
+        )
+
+    if (
+        "kirk" in text
+        and "margrabe" in text
+    ):
+        guidance.extend(
+            [
+                (
+                    "Calibrate only from synchronized daily log returns; "
+                    "derive spot from the final aligned closing prices and "
+                    "annualise volatility with the task's trading-day "
+                    "convention."
+                ),
+                (
+                    "For Margrabe with continuous dividend yields, use the "
+                    "exchange volatility sqrt(sigma1^2 + sigma2^2 - "
+                    "2*rho*sigma1*sigma2) and dividend-discounted spots."
+                ),
+                (
+                    "For Kirk, work consistently in forward variables: "
+                    "F1=S1*exp((r-D1)T), F2=S2*exp((r-D2)T), use "
+                    "w=F2/(F2+K) in the effective volatility, and discount "
+                    "the forward payoff by exp(-rT)."
+                ),
+                (
+                    "Use K=0 as an identity check: Kirk should reduce to "
+                    "the corresponding exchange-option/Margrabe result up "
+                    "to numerical tolerance under the same inputs."
+                ),
+                (
+                    "For risk-neutral Monte Carlo, use drifts r-D_i, the "
+                    "requested correlation construction and seed/path count, "
+                    "discount payoffs consistently, and compute standard "
+                    "error from the simulated payoff sample."
+                ),
+            ]
+        )
+
+    return guidance
+
+
 def build_candidate_prompt(
     *,
     instruction_text: str,
@@ -25,6 +193,9 @@ def build_candidate_prompt(
             for pack in skill_packs
         ],
         "data_inspections": data_inspections,
+        "precision_guidance": build_precision_guidance(
+            instruction_text
+        ),
     }
 
     context = json.dumps(
@@ -61,6 +232,11 @@ Requirements:
 - Fail clearly if required inputs are missing.
 - Keep runtime appropriate for the task.
 - Implement the supplied candidate strategy rather than silently switching to another approach.
+- Treat every explicit task convention as executable specification: preserve the stated operation order, date/window boundaries, percentile/interpolation convention, rebalancing sequence, sign convention, compounding rule, simulation seed/count, and requested approximation exactly.
+- For multi-output tasks, validate each required file independently; do not assume one shared schema or row count across heterogeneous outputs.
+- Prefer the exact closed-form or numerical method named by the task when one is specified. Do not substitute a superficially similar shortcut.
+- For Monte Carlo validation, use deterministic seeded generation, vectorization or bounded chunking, and compute the requested standard errors/diagnostics exactly.
+- Before returning code, mentally recompute at least one high-value identity or accounting relation when relevant.
 
 Runtime path contract:
 - Resolve the input root with:

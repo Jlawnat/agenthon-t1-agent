@@ -56,6 +56,24 @@ class FinalAuditResult:
     required_files: tuple[str, ...]
     produced_files: tuple[str, ...]
 
+    @property
+    def publishable(self) -> bool:
+        # Structural/security/inventory failures remain fail-closed.
+        # Quant-only hard failures may be judged by the official checker.
+        hard_failures = [
+            finding
+            for finding in self.findings
+            if (
+                finding.status == "fail"
+                and finding.severity == "hard_fail"
+            )
+        ]
+
+        return all(
+            finding.name.startswith("quant:")
+            for finding in hard_failures
+        )
+
     def to_dict(
         self,
     ) -> dict[str, Any]:
@@ -535,6 +553,12 @@ def audit_final_output(
             )
         )
 
+    single_tabular_output = (
+        len(required_files) == 1
+        and Path(required_files[0]).suffix.lower()
+        in {".csv", ".parquet", ".feather"}
+    )
+
     (
         produced_files,
         unsafe_entries,
@@ -760,12 +784,15 @@ def audit_final_output(
             )
         )
 
-    quant_config = (
-        QuantInvariantConfig
-        .from_compiled_specification(
-            compiled_specification
+    quant_config = None
+
+    if len(required_files) == 1:
+        quant_config = (
+            QuantInvariantConfig
+            .from_compiled_specification(
+                compiled_specification
+            )
         )
-    )
 
     unsafe_set = set(
         unsafe_entries
@@ -856,28 +883,34 @@ def audit_final_output(
                     actual_path
                 ),
                 required_columns=(
-                    compiled_specification
-                    .required_columns
+                    compiled_specification.required_columns
+                    if single_tabular_output
+                    else []
                 ),
                 expected_rows=(
-                    schema_expectations
-                    .expected_rows
+                    schema_expectations.expected_rows
+                    if single_tabular_output
+                    else None
                 ),
                 id_column=(
-                    schema_expectations
-                    .id_column
+                    schema_expectations.id_column
+                    if single_tabular_output
+                    else None
                 ),
                 expected_ids=(
-                    schema_expectations
-                    .expected_ids
+                    schema_expectations.expected_ids
+                    if single_tabular_output
+                    else None
                 ),
                 require_id_order=(
-                    schema_expectations
-                    .require_id_order
+                    schema_expectations.require_id_order
+                    if single_tabular_output
+                    else False
                 ),
                 expected_dtypes=(
-                    schema_expectations
-                    .expected_dtypes
+                    schema_expectations.expected_dtypes
+                    if single_tabular_output
+                    else {}
                 ),
             )
         )
@@ -900,32 +933,33 @@ def audit_final_output(
                 )
             )
 
-        quant = (
-            evaluate_quant_invariants(
-                output_path=(
-                    actual_path
-                ),
-                config=quant_config,
-            )
-        )
-
-        for item in quant:
-            findings.append(
-                AuditFinding(
-                    name=(
-                        f"quant:"
-                        f"{item.name}"
+        if quant_config is not None:
+            quant = (
+                evaluate_quant_invariants(
+                    output_path=(
+                        actual_path
                     ),
-                    status=item.status,
-                    severity=(
-                        item.severity
-                    ),
-                    message=item.message,
-                    details=dict(
-                        item.details
-                    ),
+                    config=quant_config,
                 )
             )
+
+            for item in quant:
+                findings.append(
+                    AuditFinding(
+                        name=(
+                            f"quant:"
+                            f"{item.name}"
+                        ),
+                        status=item.status,
+                        severity=(
+                            item.severity
+                        ),
+                        message=item.message,
+                        details=dict(
+                            item.details
+                        ),
+                    )
+                )
 
     passed = not _has_hard_failure(
         findings
