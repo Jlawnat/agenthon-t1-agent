@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -675,6 +676,22 @@ def classify_status(
     return "no_reward"
 
 
+def benchmark_exit_code(
+    rows: list[dict[str, Any]],
+) -> int:
+    if any(
+        row.get("status")
+        in {
+            "harness_error",
+            "runner_timeout",
+        }
+        for row in rows
+    ):
+        return 1
+
+    return 0
+
+
 def terminate_process_group(
     process: subprocess.Popen[Any],
 ) -> None:
@@ -724,19 +741,223 @@ def terminate_process_group(
             pass
 
 
+@dataclass(frozen=True)
+class SmokeExecution:
+    agent_return_code: int | None
+    agent_timed_out: bool
+    checker_return_code: int | None
+    checker_timed_out: bool
+    verifier_return_code: int | None
+    verifier_timed_out: bool
+    elapsed_seconds: float
+    launch_error: str | None = None
+
+    @property
+    def return_code(self) -> int | None:
+        if self.launch_error is not None:
+            return 127
+
+        if (
+            self.agent_return_code is not None
+            and self.agent_return_code != 0
+        ):
+            return self.agent_return_code
+
+        if (
+            self.checker_return_code is not None
+            and self.checker_return_code != 0
+        ):
+            return self.checker_return_code
+
+        if (
+            self.verifier_return_code is not None
+            and self.verifier_return_code not in {0, 2}
+        ):
+            return self.verifier_return_code
+
+        return 0
+
+    @property
+    def timed_out(self) -> bool:
+        return (
+            self.agent_timed_out
+            or self.checker_timed_out
+            or self.verifier_timed_out
+        )
+
+
+def _docker_environment_args(
+    environment: dict[str, str],
+) -> list[str]:
+    keys = (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "MODEL_ENDPOINT",
+        "MODEL_NAME",
+        "MODEL_TOKEN",
+        "QFBENCH_SEED",
+        "QFBENCH_NETWORK",
+    )
+
+    result: list[str] = []
+
+    for key in keys:
+        if key in environment:
+            result.extend(
+                [
+                    "-e",
+                    key,
+                ]
+            )
+
+    return result
+
+
+def build_agent_command(
+    *,
+    unit_dir: Path,
+    output_dir: Path,
+    image: str,
+    network: str,
+    environment: dict[str, str],
+) -> list[str]:
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        network,
+        *_docker_environment_args(environment),
+        "-v",
+        f"{unit_dir.resolve()}:/input:ro",
+        "-v",
+        f"{output_dir.resolve()}:/app/output",
+        image,
+        "solve",
+        "--task-dir",
+        "/input",
+        "--out",
+        "/app/output",
+    ]
+
+
+def build_verifier_command(
+    *,
+    unit_dir: Path,
+    output_dir: Path,
+) -> list[str]:
+    return [
+        "qfbench2",
+        "smoke",
+        str(unit_dir.resolve()),
+        str(output_dir.resolve()),
+        "--track",
+        "coding",
+    ]
+
+
+def build_checker_command(
+    *,
+    unit_dir: Path,
+    output_dir: Path,
+) -> list[str]:
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "-e",
+        "OUTPUT_DIR=/app/output",
+        "-e",
+        "PYTHONDONTWRITEBYTECODE=1",
+        "-v",
+        f"{unit_dir.resolve()}:/input:ro",
+        "-v",
+        f"{output_dir.resolve()}:/app/output",
+        "-v",
+        f"{output_dir.resolve()}:/output",
+        "finance-bench-sandbox:latest",
+        "bash",
+        "/input/checks/test.sh",
+    ]
+
+
+def _run_logged_command(
+    *,
+    command: list[str],
+    cwd: Path,
+    environment: dict[str, str],
+    timeout_seconds: float,
+    log_handle: Any,
+    label: str,
+) -> tuple[int | None, bool, str | None]:
+    log_handle.write(
+        f"[{label}] $ "
+        + " ".join(command)
+        + "\n\n"
+    )
+    log_handle.flush()
+
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            env=environment,
+            text=True,
+            start_new_session=(
+                os.name == "posix"
+            ),
+        )
+    except OSError:
+        log_handle.write(
+            f"[BENCHMARK RUNNER] {label} subprocess could not be started.\n"
+        )
+        log_handle.flush()
+        return (
+            None,
+            False,
+            label,
+        )
+
+    try:
+        return (
+            process.wait(
+                timeout=timeout_seconds
+            ),
+            False,
+                None,
+        )
+    except subprocess.TimeoutExpired:
+        terminate_process_group(
+            process
+        )
+        log_handle.write(
+            f"\n[BENCHMARK RUNNER] {label} timeout reached.\n"
+        )
+        log_handle.flush()
+        return (
+            None,
+            True,
+            None,
+        )
+
+
 def run_smoke(
     *,
     repo: Path,
     unit_dir: Path,
     output_dir: Path,
     image: str,
-    timeout_seconds: float,
+    network: str,
+    agent_timeout_seconds: float,
+    verifier_timeout_seconds: float,
+    outer_timeout_seconds: float | None = None,
     log_path: Path,
-) -> tuple[
-    int | None,
-    bool,
-    float,
-]:
+) -> SmokeExecution:
     output_dir.mkdir(
         parents=True,
         exist_ok=True,
@@ -746,21 +967,6 @@ def run_smoke(
         parents=True,
         exist_ok=True,
     )
-
-    command = [
-        "qfbench2",
-        "smoke",
-        str(
-            unit_dir.resolve()
-        ),
-        str(
-            output_dir.resolve()
-        ),
-        "--track",
-        "coding",
-        "--agent-image",
-        image,
-    ]
 
     environment = os.environ.copy()
 
@@ -788,68 +994,147 @@ def run_smoke(
             "PYTHONPATH"
         ] = repo_value
 
+    docker_environment = dict(
+        environment
+    )
+    docker_environment.setdefault(
+        "QFBENCH_NETWORK",
+        "restricted",
+    )
+
+    agent_command = build_agent_command(
+        unit_dir=unit_dir,
+        output_dir=output_dir,
+        image=image,
+        network=network,
+        environment=docker_environment,
+    )
+
+    checker_command = build_checker_command(
+        unit_dir=unit_dir,
+        output_dir=output_dir,
+    )
+
+    verifier_command = build_verifier_command(
+        unit_dir=unit_dir,
+        output_dir=output_dir,
+    )
+
     started = (
         time.perf_counter()
     )
+    deadline = (
+        started + outer_timeout_seconds
+        if outer_timeout_seconds is not None
+        else None
+    )
+
+    def phase_timeout(
+        configured: float,
+    ) -> float:
+        if deadline is None:
+            return configured
+
+        return max(
+            0.001,
+            min(
+                configured,
+                deadline - time.perf_counter(),
+            ),
+        )
+
+    def deadline_expired() -> bool:
+        return (
+            deadline is not None
+            and time.perf_counter() >= deadline
+        )
 
     with log_path.open(
         "w",
         encoding="utf-8",
     ) as log_handle:
-        log_handle.write(
-            "$ "
-            + " ".join(
-                command
+        agent_return_code, agent_timed_out, launch_error = (
+            _run_logged_command(
+                command=agent_command,
+                cwd=repo,
+                environment=docker_environment,
+                timeout_seconds=phase_timeout(
+                    agent_timeout_seconds
+                ),
+                log_handle=log_handle,
+                label="agent",
             )
-            + "\n\n"
-        )
-        log_handle.flush()
-
-        process = subprocess.Popen(
-            command,
-            cwd=repo,
-            stdout=log_handle,
-            stderr=subprocess.STDOUT,
-            env=environment,
-            text=True,
-            start_new_session=(
-                os.name
-                == "posix"
-            ),
         )
 
-        timed_out = False
+        checker_return_code: int | None = None
+        checker_timed_out = False
+        verifier_return_code: int | None = None
+        verifier_timed_out = False
 
-        try:
-            return_code = (
-                process.wait(
-                    timeout=(
-                        timeout_seconds
-                    )
+        if (
+            not agent_timed_out
+            and launch_error is None
+            and not deadline_expired()
+        ):
+            checker_return_code, checker_timed_out, checker_error = (
+                _run_logged_command(
+                    command=checker_command,
+                    cwd=repo,
+                    environment=environment,
+                    timeout_seconds=phase_timeout(
+                        verifier_timeout_seconds
+                    ),
+                    log_handle=log_handle,
+                    label="checker",
                 )
             )
+            launch_error = checker_error
+        elif (
+            not agent_timed_out
+            and launch_error is None
+        ):
+            checker_timed_out = True
 
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            terminate_process_group(
-                process
+        if (
+            not agent_timed_out
+            and launch_error is None
+            and not checker_timed_out
+            and not deadline_expired()
+        ):
+            verifier_return_code, verifier_timed_out, verifier_error = (
+                _run_logged_command(
+                    command=verifier_command,
+                    cwd=repo,
+                    environment=environment,
+                    timeout_seconds=phase_timeout(
+                        verifier_timeout_seconds
+                    ),
+                    log_handle=log_handle,
+                    label="verifier",
+                )
             )
-            return_code = None
-
-            log_handle.write(
-                "\n[BENCHMARK RUNNER] "
-                "Outer timeout reached.\n"
-            )
+            launch_error = verifier_error
+        elif (
+            not agent_timed_out
+            and launch_error is None
+            and not checker_timed_out
+        ):
+            verifier_timed_out = True
 
     elapsed = (
         time.perf_counter()
         - started
     )
 
-    return (
-        return_code,
-        timed_out,
-        elapsed,
+    return SmokeExecution(
+        agent_return_code=agent_return_code,
+        agent_timed_out=agent_timed_out,
+        checker_return_code=checker_return_code,
+        checker_timed_out=checker_timed_out,
+        verifier_return_code=verifier_return_code,
+        verifier_timed_out=verifier_timed_out,
+        elapsed_seconds=elapsed,
+        launch_error=launch_error,
     )
 
 
@@ -890,8 +1175,14 @@ def write_results_csv(
         "verifier_timeout_sec",
         "outer_timeout_sec",
         "qfbench_exit_code",
+        "checker_exit_code",
         "runner_timed_out",
         "pytest_exit_code",
+        "agent_exit_code",
+        "agent_timed_out",
+        "checker_timed_out",
+        "verifier_timed_out",
+        "subprocess_launch_error",
         "pytest_total",
         "pytest_passed",
         "pytest_failed",
@@ -1456,17 +1747,22 @@ def main() -> int:
             f"{agent_timeout:.0f}s"
         )
 
-        return_code, timed_out, elapsed = (
-            run_smoke(
-                repo=repo,
-                unit_dir=unit_dir,
-                output_dir=output_dir,
-                image=args.image,
-                timeout_seconds=(
-                    outer_timeout
-                ),
-                log_path=log_path,
-            )
+        execution = run_smoke(
+            repo=repo,
+            unit_dir=unit_dir,
+            output_dir=output_dir,
+            image=args.image,
+            network=(
+                "qfb2-eval"
+                if eval_network
+                else "none"
+            ),
+            agent_timeout_seconds=agent_timeout,
+            verifier_timeout_seconds=(
+                verifier_timeout or 300.0
+            ),
+            outer_timeout_seconds=outer_timeout,
+            log_path=log_path,
         )
 
         reward_payload = (
@@ -1532,8 +1828,8 @@ def main() -> int:
         )
 
         status = classify_status(
-            return_code=return_code,
-            timed_out=timed_out,
+              return_code=execution.return_code,
+              timed_out=execution.timed_out,
             reward=reward,
               pytest_failed=pytest_summary[
                   "pytest_failed"
@@ -1553,9 +1849,9 @@ def main() -> int:
             "reward_details": (
                 reward_details
             ),
-            "elapsed_seconds": round(
-                elapsed,
-                6,
+                            "elapsed_seconds": round(
+                                    execution.elapsed_seconds,
+                                    6,
             ),
             "agent_timeout_sec": (
                 agent_timeout
@@ -1567,10 +1863,28 @@ def main() -> int:
                 outer_timeout
             ),
             "qfbench_exit_code": (
-                return_code
+                  execution.verifier_return_code
+              ),
+              "checker_exit_code": (
+                  execution.checker_return_code
+              ),
+              "agent_exit_code": (
+                  execution.agent_return_code
+              ),
+              "agent_timed_out": (
+                  execution.agent_timed_out
+              ),
+              "checker_timed_out": (
+                  execution.checker_timed_out
+              ),
+              "verifier_timed_out": (
+                  execution.verifier_timed_out
             ),
+              "subprocess_launch_error": (
+                  execution.launch_error
+              ),
             "runner_timed_out": (
-                timed_out
+                  execution.timed_out
             ),
             "pytest_exit_code": (
                 pytest_exit_code
@@ -1612,7 +1926,7 @@ def main() -> int:
         )
         print(
             f"  elapsed: "
-            f"{elapsed:.1f}s"
+              f"{execution.elapsed_seconds:.1f}s"
         )
         print(
             f"  deliverables: "
@@ -1694,7 +2008,7 @@ def main() -> int:
         )
     )
 
-    return 0
+    return benchmark_exit_code(results)
 
 
 if __name__ == "__main__":

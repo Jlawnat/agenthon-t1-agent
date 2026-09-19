@@ -4,18 +4,170 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from tools.benchmark_runner import (
+    benchmark_exit_code,
+    build_agent_command,
+    build_checker_command,
+    build_verifier_command,
     classify_status,
     load_inventory,
     parse_pytest_report,
     parse_reward,
+    run_smoke,
     select_units,
     sha256_file,
+    SmokeExecution,
 )
 
 
 class BenchmarkRunnerContractTests(unittest.TestCase):
+    def test_unexpected_verifier_exit_propagates(self) -> None:
+        execution = SmokeExecution(
+            agent_return_code=0,
+            agent_timed_out=False,
+            checker_return_code=0,
+            checker_timed_out=False,
+            verifier_return_code=7,
+            verifier_timed_out=False,
+            elapsed_seconds=1.0,
+        )
+
+        self.assertEqual(execution.return_code, 7)
+        self.assertEqual(
+            classify_status(
+                return_code=execution.return_code,
+                timed_out=execution.timed_out,
+                reward=1.0,
+            ),
+            "harness_error",
+        )
+        self.assertEqual(
+            benchmark_exit_code([{"status": "harness_error"}]),
+            1,
+        )
+
+        verifier_failure = SmokeExecution(
+            agent_return_code=0,
+            agent_timed_out=False,
+            checker_return_code=0,
+            checker_timed_out=False,
+            verifier_return_code=1,
+            verifier_timed_out=False,
+            elapsed_seconds=1.0,
+        )
+        self.assertEqual(verifier_failure.return_code, 1)
+
+    def test_subprocess_launch_failure_is_captured_per_unit(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch(
+                "tools.benchmark_runner.subprocess.Popen",
+                side_effect=OSError("simulated launch failure"),
+            ):
+                execution = run_smoke(
+                    repo=root,
+                    unit_dir=root / "unit",
+                    output_dir=root / "output",
+                    image="agenthon-t1:dev",
+                    network="qfb2-eval",
+                    agent_timeout_seconds=10.0,
+                    verifier_timeout_seconds=10.0,
+                    log_path=root / "smoke.log",
+                )
+
+        self.assertEqual(execution.agent_return_code, None)
+        self.assertFalse(execution.agent_timed_out)
+        self.assertEqual(execution.launch_error, "agent")
+        self.assertEqual(execution.return_code, 127)
+
+    def test_agent_command_owns_container_execution(self) -> None:
+        command = build_agent_command(
+            unit_dir=Path("/units/example"),
+            output_dir=Path("/runs/output"),
+            image="agenthon-t1:dev",
+            network="qfb2-eval",
+            environment={
+                "MODEL_ENDPOINT": "http://agenthon-mock-model:8000",
+                "MODEL_TOKEN": "test-token",
+                "QFBENCH_SEED": "42",
+            },
+        )
+
+        self.assertEqual(command[:5], [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "qfb2-eval",
+        ])
+        self.assertIn("/units/example:/input:ro", command)
+        self.assertIn("/runs/output:/app/output", command)
+        self.assertEqual(command[-5:], [
+            "solve",
+            "--task-dir",
+            "/input",
+            "--out",
+            "/app/output",
+        ])
+        self.assertNotIn("--agent-image", command)
+
+    def test_verifier_command_matches_installed_qfbench2_contract(self) -> None:
+        command = build_verifier_command(
+            unit_dir=Path("/units/example"),
+            output_dir=Path("/runs/output"),
+        )
+
+        self.assertEqual(
+            command,
+            [
+                "qfbench2",
+                "smoke",
+                "/units/example",
+                "/runs/output",
+                "--track",
+                "coding",
+            ],
+        )
+        self.assertNotIn("--agent-image", command)
+
+    def test_checker_command_owns_reward_artifact_generation(self) -> None:
+        command = build_checker_command(
+            unit_dir=Path("/units/example"),
+            output_dir=Path("/runs/output"),
+        )
+
+        self.assertIn("--network", command)
+        self.assertIn("none", command)
+        self.assertIn("/units/example:/input:ro", command)
+        self.assertIn("/runs/output:/app/output", command)
+        self.assertIn("/runs/output:/output", command)
+        self.assertEqual(command[-2:], [
+            "bash",
+            "/input/checks/test.sh",
+        ])
+
+    def test_harness_errors_produce_nonzero_runner_exit(self) -> None:
+        self.assertEqual(
+            benchmark_exit_code(
+                [{"status": "pass"}, {"status": "fail"}]
+            ),
+            0,
+        )
+        self.assertEqual(
+            benchmark_exit_code(
+                [{"status": "harness_error"}]
+            ),
+            1,
+        )
+        self.assertEqual(
+            benchmark_exit_code(
+                [{"status": "runner_timeout"}]
+            ),
+            1,
+        )
+
     def test_load_inventory_requires_a_units_list(self) -> None:
         with TemporaryDirectory() as directory:
             path = Path(directory) / "inventory.json"
