@@ -26,13 +26,14 @@ class TaskPlan:
 
 
 def _candidate_count(difficulty: str) -> int:
+    # Score-oriented allocation: retain method diversity even for
+    # easy tasks. With the current 12-call global model budget,
+    # two easy/medium candidates plus one repair per candidate still
+    # leaves headroom after specification enrichment and planning.
     if difficulty == "hard":
         return 3
 
-    if difficulty == "medium":
-        return 2
-
-    return 1
+    return 2
 
 
 def build_task_plan(

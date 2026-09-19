@@ -161,7 +161,11 @@ class ModelClient:
             "temperature": temperature_value,
             "max_tokens": self.max_output_tokens,
             "chat_template_kwargs": {
-                "enable_thinking": False,
+                # The approved Nemotron House model is a reasoning model.
+                # Use low-effort thinking to recover reasoning quality while
+                # conserving the fixed output-token budget for final code.
+                "enable_thinking": True,
+                "low_effort": True,
             },
         }
 

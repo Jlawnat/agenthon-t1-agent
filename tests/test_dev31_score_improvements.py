@@ -144,6 +144,25 @@ class Dev31ScoreImprovementTests(
             "easy",
         )
 
+    def test_easy_task_keeps_two_candidate_attempts(
+        self,
+    ) -> None:
+        spec = _historical_var_spec()
+        compiled = compile_specification(
+            spec
+        )
+
+        from agent.planning import build_task_plan
+
+        plan = build_task_plan(
+            compiled
+        )
+
+        self.assertEqual(
+            plan.candidate_count,
+            2,
+        )
+
     def test_adaptive_execution_timeout_scales_with_card_budget(
         self,
     ) -> None:
