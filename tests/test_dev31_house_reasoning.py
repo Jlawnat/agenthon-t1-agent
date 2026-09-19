@@ -69,6 +69,10 @@ class HouseReasoningPayloadTests(unittest.TestCase):
             kwargs["low_effort"],
             True,
         )
+        self.assertIs(
+            kwargs["force_nonempty_content"],
+            True,
+        )
         self.assertEqual(
             seen["payload"]["max_tokens"],
             4000,

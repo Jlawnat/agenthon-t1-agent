@@ -166,6 +166,7 @@ class ModelClient:
                 # conserving the fixed output-token budget for final code.
                 "enable_thinking": True,
                 "low_effort": True,
+                "force_nonempty_content": True,
             },
         }
 

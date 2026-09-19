@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from agent.planner import (
     CandidateStrategy,
@@ -8,12 +9,27 @@ from agent.planner import (
 )
 
 
-def parse_planner_output(
-    text: str,
-    expected_candidates: int,
-) -> PlannerOutput:
+_REQUIRED_KEYS = {
+    "task_summary",
+    "shared_requirements",
+    "candidate_strategies",
+    "final_checks",
+}
 
-    cleaned = text.strip()
+
+def _extract_planner_json(
+    text: str,
+) -> dict:
+    cleaned = str(text).strip()
+
+    # Reasoning-enabled model responses can contain a hidden-style
+    # thinking wrapper or a harmless explanatory preamble. Keep the
+    # planner contract strict, but recover the intended JSON object.
+    cleaned = re.sub(
+        r"(?is)<think>.*?</think>",
+        "",
+        cleaned,
+    ).strip()
 
     if cleaned.startswith("```"):
         lines = cleaned.splitlines()
@@ -28,20 +44,49 @@ def parse_planner_output(
 
     try:
         payload = json.loads(cleaned)
+    except json.JSONDecodeError:
+        payload = None
 
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "Planner response is not valid JSON."
-        ) from exc
+    if (
+        isinstance(payload, dict)
+        and set(payload) == _REQUIRED_KEYS
+    ):
+        return payload
 
-    required_keys = {
-        "task_summary",
-        "shared_requirements",
-        "candidate_strategies",
-        "final_checks",
-    }
+    decoder = json.JSONDecoder()
 
-    if set(payload) != required_keys:
+    for index, character in enumerate(cleaned):
+        if character != "{":
+            continue
+
+        try:
+            candidate, _ = decoder.raw_decode(
+                cleaned[index:]
+            )
+        except json.JSONDecodeError:
+            continue
+
+        if (
+            isinstance(candidate, dict)
+            and set(candidate) == _REQUIRED_KEYS
+        ):
+            return candidate
+
+    raise ValueError(
+        "Planner response is not valid planner JSON."
+    )
+
+
+def parse_planner_output(
+    text: str,
+    expected_candidates: int,
+) -> PlannerOutput:
+
+    payload = _extract_planner_json(
+        text
+    )
+
+    if set(payload) != _REQUIRED_KEYS:
         raise ValueError(
             "Planner response has incorrect top-level keys."
         )
