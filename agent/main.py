@@ -5,38 +5,29 @@ import os
 from pathlib import Path
 
 from agent.model_client import ModelClient
+from agent.offline_runtime import solve_offline
 from agent.orchestrator import solve_task
 from agent.runtime_adapters import (
     build_runtime_components,
 )
 
 
-_REQUIRED_RUNTIME_ENV = (
+_MODEL_RUNTIME_ENV = (
     "MODEL_ENDPOINT",
     "MODEL_NAME",
     "MODEL_TOKEN",
-    "QFBENCH_SEED",
 )
 
 
-def _require_runtime_environment() -> None:
-    missing = [
-        name
-        for name in _REQUIRED_RUNTIME_ENV
-        if not os.getenv(name)
-    ]
-
-    if missing:
+def _require_seed() -> int:
+    raw = os.getenv("QFBENCH_SEED")
+    if not raw:
         raise RuntimeError(
-            "Missing required runtime environment "
-            "variable(s): "
-            + ", ".join(missing)
+            "Missing required runtime environment variable: QFBENCH_SEED"
         )
 
     try:
-        seed = int(
-            os.environ["QFBENCH_SEED"]
-        )
+        seed = int(raw)
     except ValueError as exc:
         raise RuntimeError(
             "QFBENCH_SEED must be a non-negative integer."
@@ -46,6 +37,32 @@ def _require_runtime_environment() -> None:
         raise RuntimeError(
             "QFBENCH_SEED must be a non-negative integer."
         )
+
+    return seed
+
+
+def _runtime_mode() -> str:
+    configured = [
+        bool(os.getenv(name))
+        for name in _MODEL_RUNTIME_ENV
+    ]
+
+    if all(configured):
+        return "model"
+
+    if any(configured):
+        missing = [
+            name
+            for name, present
+            in zip(_MODEL_RUNTIME_ENV, configured)
+            if not present
+        ]
+        raise RuntimeError(
+            "Partial model runtime configuration. Missing: "
+            + ", ".join(missing)
+        )
+
+    return "offline"
 
 
 def _validate_paths(
@@ -99,7 +116,7 @@ def solve(
     task_dir: Path,
     out_dir: Path,
 ) -> None:
-    _require_runtime_environment()
+    seed = _require_seed()
 
     work_root = Path(
         os.getenv(
@@ -117,6 +134,16 @@ def solve(
         out_dir=out_dir,
         work_root=work_root,
     )
+
+    mode = _runtime_mode()
+
+    if mode == "offline":
+        solve_offline(
+            task_dir=task_dir,
+            out_dir=out_dir,
+            seed=seed,
+        )
+        return
 
     model_client = ModelClient()
 
