@@ -18,6 +18,10 @@ from agent.orchestrator_state import OrchestratorState, PipelineStage
 from agent.quality_pipeline import InitialQualityResult
 from agent.run_budget import RunBudgetExceeded
 from agent.run_context import RunContext
+from agent.semantic_selection import (
+    SemanticSelectionRequest,
+    SemanticSelectionResult,
+)
 from agent.specification import TaskSpecification
 from agent.targeted_repair import RepairBrief, build_repair_brief, classify_failure
 
@@ -43,6 +47,10 @@ class RepairedCandidate:
 
 
 RepairFunction = Callable[[RepairRequest], RepairedCandidate]
+SemanticSelectionFunction = Callable[
+    [SemanticSelectionRequest],
+    SemanticSelectionResult,
+]
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,8 @@ class RepairAdapter:
     repair: RepairFunction
     uses_model_budget: bool = True
     name: str = "repair-generator"
+    semantic_compare: SemanticSelectionFunction | None = None
+    semantic_compare_uses_model_budget: bool = True
 
 
 @dataclass

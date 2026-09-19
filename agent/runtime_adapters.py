@@ -19,6 +19,12 @@ from agent.planner import build_planner_prompt
 from agent.planner_validator import parse_planner_output
 from agent.planning import build_task_plan
 from agent.run_context import RunContext
+from agent.semantic_selection import (
+    SemanticSelectionRequest,
+    SemanticSelectionResult,
+    build_semantic_selection_prompt,
+    parse_semantic_selection_response,
+)
 from agent.repair_pipeline import (
     RepairedCandidate,
     RepairAdapter,
@@ -588,6 +594,36 @@ def build_runtime_components(
             ),
         )
 
+    def semantic_compare(
+        request: SemanticSelectionRequest,
+    ) -> SemanticSelectionResult:
+        prompt = build_semantic_selection_prompt(
+            request
+        )
+
+        if shared_run_context is None:
+            raise RuntimeError(
+                "RunContext is unavailable for semantic selection."
+            )
+
+        response = model_client.complete(
+            prompt,
+            temperature=0.0,
+            timeout_seconds=_model_timeout(
+                shared_run_context
+            ),
+        )
+
+        tokens_used = _response_tokens(
+            response
+        )
+
+        return parse_semantic_selection_response(
+            response.text,
+            eligible_ids=request.eligible_ids(),
+            tokens_used=tokens_used,
+        )
+
     def repair(
         request: RepairRequest,
     ) -> RepairedCandidate:
@@ -629,5 +665,7 @@ def build_runtime_components(
             repair=repair,
             uses_model_budget=True,
             name="house-model-repairer",
+            semantic_compare=semantic_compare,
+            semantic_compare_uses_model_budget=True,
         ),
     )

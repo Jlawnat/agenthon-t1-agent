@@ -730,6 +730,21 @@ def solve_task(
                     repair.production
                 ),
                 allow_best_effort=True,
+                semantic_compare=(
+                    repairer.semantic_compare
+                ),
+                semantic_compare_uses_model_budget=(
+                    repairer.semantic_compare_uses_model_budget
+                ),
+                run_context=(
+                    front_half.run_context
+                ),
+                specification=(
+                    front_half.specification
+                ),
+                compiled_specification=(
+                    front_half.compiled_specification
+                ),
             )
         )
 
