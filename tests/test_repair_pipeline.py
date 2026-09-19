@@ -900,5 +900,174 @@ class RepairPipelineTests(
             )
 
 
+    def test_second_repair_can_rescue_strictly_improving_candidate(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            (
+                task_dir,
+                specification,
+                compiled,
+                context,
+                state,
+                production,
+                quality,
+            ) = _produce_and_evaluate(
+                root=root,
+                generate=(
+                    lambda request:
+                    GeneratedCandidate(
+                        code=(
+                            _runtime_failure_code()
+                        )
+                    )
+                ),
+                candidate_count=1,
+            )
+
+            calls = []
+
+            def repair(request):
+                calls.append(
+                    request.brief.repair_attempt_number
+                )
+
+                if len(calls) == 1:
+                    # Executes successfully but produces no output:
+                    # strictly better than a runtime crash, but still
+                    # not publishable.
+                    return RepairedCandidate(
+                        code="pass"
+                    )
+
+                return RepairedCandidate(
+                    code=_good_code()
+                )
+
+            result = run_targeted_repair_stage(
+                task_dir=task_dir,
+                repair_workspace_base_dir=(
+                    root / "repairs"
+                ),
+                state=state,
+                run_context=context,
+                quality=quality,
+                specification=specification,
+                compiled_specification=compiled,
+                repairer=RepairAdapter(
+                    repair=repair,
+                    uses_model_budget=False,
+                    name="two-pass-repair",
+                ),
+            )
+
+            candidate = (
+                production
+                .items[0]
+                .candidate
+            )
+
+            self.assertEqual(
+                calls,
+                [1, 2],
+            )
+
+            self.assertEqual(
+                result.attempted_candidate_ids,
+                (1, 1),
+            )
+
+            self.assertEqual(
+                result.repaired_candidate_ids,
+                (1,),
+            )
+
+            self.assertEqual(
+                candidate.current_status,
+                "validated",
+            )
+
+            self.assertEqual(
+                len(candidate.attempts),
+                3,
+            )
+
+    def test_repair_request_receives_sanitized_data_inspections(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            (
+                task_dir,
+                specification,
+                compiled,
+                context,
+                state,
+                production,
+                quality,
+            ) = _produce_and_evaluate(
+                root=root,
+                generate=(
+                    lambda request:
+                    GeneratedCandidate(
+                        code=(
+                            _runtime_failure_code()
+                        )
+                    )
+                ),
+                candidate_count=1,
+            )
+
+            seen = {}
+
+            def repair(request):
+                seen["data"] = (
+                    request.data_inspections
+                )
+
+                return RepairedCandidate(
+                    code=_good_code()
+                )
+
+            inspections = {
+                "input.csv": {
+                    "columns": [
+                        "id",
+                        "input_value",
+                    ],
+                    "rows": 2,
+                }
+            }
+
+            result = run_targeted_repair_stage(
+                task_dir=task_dir,
+                repair_workspace_base_dir=(
+                    root / "repairs"
+                ),
+                state=state,
+                run_context=context,
+                quality=quality,
+                specification=specification,
+                compiled_specification=compiled,
+                repairer=RepairAdapter(
+                    repair=repair,
+                    uses_model_budget=False,
+                ),
+                data_inspections=inspections,
+            )
+
+            self.assertEqual(
+                seen["data"],
+                inspections,
+            )
+
+            self.assertEqual(
+                result.repaired_candidate_ids,
+                (1,),
+            )
+
 if __name__ == "__main__":
     unittest.main()

@@ -688,6 +688,13 @@ def solve_task(
                 execution_timeout_seconds=(
                     resolved_execution_timeout
                 ),
+                data_inspections=(
+                    getattr(
+                        front_half.plan,
+                        "data_inspections",
+                        None,
+                    )
+                ),
             )
         )
 

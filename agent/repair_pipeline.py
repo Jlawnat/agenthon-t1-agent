@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 import time
 
 from agent.budget import RepairBudget, RepairBudgetExceeded
@@ -34,6 +34,7 @@ class RepairRequest:
     brief: RepairBrief
     specification: TaskSpecification
     compiled_specification: CompiledSpecification
+    data_inspections: dict[str, dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -233,6 +234,551 @@ def _repair_evaluation_error(exc: Exception) -> VerificationEvidence:
     )
 
 
+@dataclass(frozen=True)
+class _RepairOutcome:
+    attempted: bool
+    validated: bool
+    improved: bool
+    failure: str | None = None
+
+
+def _validation_error_for_candidate(
+    item: CandidateProductionItem,
+) -> str | None:
+    candidate = item.candidate
+
+    if candidate.current_status != "code_invalid":
+        return None
+
+    attempt = candidate.latest_attempt()
+
+    return (
+        candidate.hard_failures[0]
+        if candidate.hard_failures
+        else (
+            attempt.stderr
+            if attempt is not None
+            else None
+        )
+    )
+
+
+def _repair_priority_key(
+    item: CandidateProductionItem,
+) -> tuple[int, int, int, int, int]:
+    attempt = item.candidate.latest_attempt()
+
+    if attempt is None:
+        return (
+            9,
+            9,
+            9,
+            9,
+            item.candidate.candidate_id,
+        )
+
+    return (
+        *_attempt_quality_key(attempt),
+        item.candidate.candidate_id,
+    )
+
+
+def _attempt_is_publishable(
+    attempt: CandidateAttempt | None,
+) -> bool:
+    if attempt is None:
+        return False
+
+    quality = _attempt_quality_key(
+        attempt
+    )
+
+    return (
+        quality[0] == 0
+        and quality[1] == 0
+        and quality[2] == 0
+    )
+
+
+def _repair_one_item(
+    *,
+    item: CandidateProductionItem,
+    task_dir: Path,
+    repair_workspace_base_dir: Path,
+    run_context: RunContext,
+    quality: InitialQualityResult,
+    specification: TaskSpecification,
+    compiled_specification: CompiledSpecification,
+    repairer: RepairAdapter,
+    repair_budget: RepairBudget,
+    execution_timeout_seconds: float,
+    data_inspections: dict[str, dict[str, Any]] | None,
+) -> _RepairOutcome:
+    candidate = item.candidate
+    candidate_id = candidate.candidate_id
+
+    _ensure_initial_validation_attempt(
+        item
+    )
+
+    source_attempt = candidate.latest_attempt()
+
+    if source_attempt is None:
+        return _RepairOutcome(
+            attempted=False,
+            validated=False,
+            improved=False,
+            failure=(
+                "No candidate attempt was available for repair."
+            ),
+        )
+
+    validation_error = (
+        _validation_error_for_candidate(
+            item
+        )
+    )
+
+    failure_label = classify_failure(
+        source_attempt,
+        validation_error=validation_error,
+    )
+
+    if failure_label is None:
+        return _RepairOutcome(
+            attempted=False,
+            validated=False,
+            improved=False,
+        )
+
+    source_code = (
+        item.validated_code
+        or item.raw_code
+    )
+
+    if not source_code:
+        return _RepairOutcome(
+            attempted=False,
+            validated=False,
+            improved=False,
+            failure=(
+                "No candidate source code was available for repair."
+            ),
+        )
+
+    source_attempt_count = len(
+        candidate.attempts
+    )
+    source_status = (
+        candidate.current_status
+    )
+    source_hard_failures = list(
+        candidate.hard_failures
+    )
+    source_warnings = list(
+        candidate.warnings
+    )
+    source_validated_code = (
+        item.validated_code
+    )
+    source_workspace = (
+        item.workspace
+    )
+    source_solver_path = (
+        item.solver_path
+    )
+    source_execution = (
+        item.execution
+    )
+
+    def restore_source() -> None:
+        del candidate.attempts[
+            source_attempt_count:
+        ]
+
+        candidate.current_status = (
+            source_status
+        )
+        candidate.hard_failures = (
+            source_hard_failures
+        )
+        candidate.warnings = (
+            source_warnings
+        )
+
+        item.validated_code = (
+            source_validated_code
+        )
+        item.workspace = (
+            source_workspace
+        )
+        item.solver_path = (
+            source_solver_path
+        )
+        item.execution = (
+            source_execution
+        )
+
+    if not repair_budget.can_reserve():
+        return _RepairOutcome(
+            attempted=False,
+            validated=False,
+            improved=False,
+            failure=(
+                "Targeted repair budget is exhausted."
+            ),
+        )
+
+    if (
+        repairer.uses_model_budget
+        and run_context.budget.remaining_model_calls <= 0
+    ):
+        return _RepairOutcome(
+            attempted=False,
+            validated=False,
+            improved=False,
+            failure=(
+                "Global model-call budget is exhausted."
+            ),
+        )
+
+    if run_context.budget.remaining_candidate_attempts <= 0:
+        return _RepairOutcome(
+            attempted=False,
+            validated=False,
+            improved=False,
+            failure=(
+                "Global candidate-attempt budget is exhausted."
+            ),
+        )
+
+    try:
+        brief = build_repair_brief(
+            attempt=source_attempt,
+            budget=repair_budget,
+            validation_error=validation_error,
+        )
+    except RepairBudgetExceeded as exc:
+        return _RepairOutcome(
+            attempted=False,
+            validated=False,
+            improved=False,
+            failure=_bounded_error(exc),
+        )
+    except Exception as exc:
+        return _RepairOutcome(
+            attempted=False,
+            validated=False,
+            improved=False,
+            failure=(
+                "Repair brief construction failed: "
+                f"{_bounded_error(exc)}"
+            ),
+        )
+
+    if brief is None:
+        return _RepairOutcome(
+            attempted=False,
+            validated=False,
+            improved=False,
+        )
+
+    if repairer.uses_model_budget:
+        try:
+            run_context.budget.reserve_model_call()
+        except RunBudgetExceeded as exc:
+            return _RepairOutcome(
+                attempted=False,
+                validated=False,
+                improved=False,
+                failure=_bounded_error(exc),
+            )
+
+    request = RepairRequest(
+        candidate_id=candidate_id,
+        candidate_seed=item.candidate_seed,
+        source_code=source_code,
+        brief=brief,
+        specification=specification,
+        compiled_specification=(
+            compiled_specification
+        ),
+        data_inspections=(
+            data_inspections
+        ),
+    )
+
+    repair_start = time.perf_counter()
+
+    try:
+        repaired_candidate = repairer.repair(
+            request
+        )
+    except Exception as exc:
+        elapsed = (
+            time.perf_counter()
+            - repair_start
+        )
+
+        repair_budget.record_usage(
+            tokens=0,
+            wall_seconds=elapsed,
+        )
+
+        candidate.current_status = (
+            "repair_generation_failed"
+        )
+
+        return _RepairOutcome(
+            attempted=True,
+            validated=False,
+            improved=False,
+            failure=_bounded_error(exc),
+        )
+
+    repair_elapsed = (
+        time.perf_counter()
+        - repair_start
+    )
+
+    repair_budget.record_usage(
+        tokens=repaired_candidate.tokens_used,
+        wall_seconds=repair_elapsed,
+    )
+
+    if repaired_candidate.tokens_used:
+        run_context.budget.record_tokens(
+            repaired_candidate.tokens_used
+        )
+
+    _record_repair_strategy(
+        item=item,
+        brief=brief,
+        repairer=repairer,
+        tokens_used=(
+            repaired_candidate.tokens_used
+        ),
+    )
+
+    try:
+        validated_code = validate_python_code(
+            repaired_candidate.code
+        )
+    except Exception as exc:
+        error = (
+            f"{type(exc).__name__}: "
+            f"{_bounded_error(exc)}"
+        )
+
+        _code_validation_attempt(
+            item=item,
+            error=error,
+            repair_reason=brief.strategy,
+            repaired=True,
+        )
+
+        # A repair is advisory. Invalid repaired code must never
+        # replace a better executable source attempt.
+        restore_source()
+
+        return _RepairOutcome(
+            attempted=True,
+            validated=False,
+            improved=False,
+            failure=error,
+        )
+
+    try:
+        run_context.budget.reserve_candidate_attempt()
+    except RunBudgetExceeded as exc:
+        candidate.current_status = (
+            "repair_execution_budget_exhausted"
+        )
+
+        return _RepairOutcome(
+            attempted=True,
+            validated=False,
+            improved=False,
+            failure=_bounded_error(exc),
+        )
+
+    next_attempt_number = (
+        len(candidate.attempts) + 1
+    )
+
+    repair_attempt_base = (
+        repair_workspace_base_dir
+        / f"attempt_{next_attempt_number}"
+    )
+
+    try:
+        workspace = CandidateWorkspace.create(
+            base_dir=repair_attempt_base,
+            candidate_id=candidate_id,
+            task_dir=task_dir,
+        )
+
+        solver_path = (
+            workspace.source_dir
+            / "solver.py"
+        )
+
+        solver_path.write_text(
+            validated_code,
+            encoding="utf-8",
+        )
+
+        timeout = (
+            run_context.bounded_timeout(
+                execution_timeout_seconds
+            )
+        )
+
+        execution = run_candidate(
+            workspace,
+            solver_path,
+            timeout_seconds=timeout,
+            env_overrides=(
+                _candidate_environment(
+                    item.candidate_seed
+                )
+            ),
+        )
+    except Exception as exc:
+        candidate.current_status = (
+            "repair_execution_infrastructure_failed"
+        )
+
+        return _RepairOutcome(
+            attempted=True,
+            validated=False,
+            improved=False,
+            failure=_bounded_error(exc),
+        )
+
+    item.validated_code = (
+        validated_code
+    )
+    item.workspace = (
+        workspace
+    )
+    item.solver_path = (
+        solver_path
+    )
+    item.execution = (
+        execution
+    )
+
+    attempt = collect_execution_evidence(
+        execution=execution,
+        output_dir=workspace.output_dir,
+        required_output_paths=(
+            specification.required_output_paths
+        ),
+        attempt_number=(
+            next_attempt_number
+        ),
+        solver_path=solver_path,
+    )
+
+    attempt.repair_reason = (
+        brief.strategy
+    )
+
+    try:
+        evaluate_collected_attempt(
+            candidate=candidate,
+            attempt=attempt,
+            output_dir=workspace.output_dir,
+            required_output_paths=(
+                specification
+                .required_output_paths
+            ),
+            required_columns=(
+                compiled_specification
+                .required_columns
+            ),
+            schema_expectations=(
+                quality.schema_expectations
+            ),
+            compiled_specification=(
+                compiled_specification
+            ),
+        )
+    except Exception as exc:
+        attempt.structural_evidence.append(
+            _repair_evaluation_error(
+                exc
+            )
+        )
+
+        if (
+            candidate.latest_attempt()
+            is not attempt
+        ):
+            candidate.add_attempt(
+                attempt
+            )
+
+        # Evaluation failure is not allowed to destroy the
+        # previously usable candidate state.
+        restore_source()
+
+        return _RepairOutcome(
+            attempted=True,
+            validated=False,
+            improved=False,
+            failure=_bounded_error(exc),
+        )
+
+    repaired_attempt = (
+        candidate.latest_attempt()
+    )
+
+    if repaired_attempt is None:
+        restore_source()
+
+        return _RepairOutcome(
+            attempted=True,
+            validated=False,
+            improved=False,
+            failure=(
+                "Repaired candidate produced no evaluated attempt."
+            ),
+        )
+
+    if (
+        _attempt_quality_key(
+            repaired_attempt
+        )
+        >= _attempt_quality_key(
+            source_attempt
+        )
+    ):
+        restore_source()
+
+        return _RepairOutcome(
+            attempted=True,
+            validated=False,
+            improved=False,
+            failure=(
+                "Repair was not a strict improvement; "
+                "restored the previous candidate attempt."
+            ),
+        )
+
+    validated = (
+        _attempt_is_publishable(
+            repaired_attempt
+        )
+    )
+
+    return _RepairOutcome(
+        attempted=True,
+        validated=validated,
+        improved=True,
+    )
+
 def run_targeted_repair_stage(
     *,
     task_dir: Path,
@@ -245,6 +791,7 @@ def run_targeted_repair_stage(
     repairer: RepairAdapter,
     repair_budget: RepairBudget | None = None,
     execution_timeout_seconds: float = 120.0,
+    data_inspections: dict[str, dict[str, Any]] | None = None,
 ) -> TargetedRepairResult:
     task_dir = task_dir.resolve()
     repair_workspace_base_dir = repair_workspace_base_dir.resolve()
@@ -268,299 +815,304 @@ def run_targeted_repair_stage(
     skipped: list[int] = []
     failures: dict[int, str] = {}
 
-    items = sorted(
-        quality.production.items,
-        key=lambda item: item.candidate.candidate_id,
+    all_items = list(
+        quality.production.items
     )
 
-    for item in items:
-        candidate = item.candidate
-        candidate_id = candidate.candidate_id
+    nonrepairable_ids: list[int] = []
+    repairable_items: list[
+        CandidateProductionItem
+    ] = []
 
-        _ensure_initial_validation_attempt(item)
+    for item in all_items:
+        _ensure_initial_validation_attempt(
+            item
+        )
 
-        source_attempt = candidate.latest_attempt()
-        if source_attempt is None:
-            skipped.append(candidate_id)
+        attempt = (
+            item.candidate
+            .latest_attempt()
+        )
+
+        if attempt is None:
+            nonrepairable_ids.append(
+                item.candidate.candidate_id
+            )
             continue
 
-        validation_error = None
-        if candidate.current_status == "code_invalid":
-            validation_error = (
-                candidate.hard_failures[0]
-                if candidate.hard_failures
-                else source_attempt.stderr
-            )
-
         failure_label = classify_failure(
-            source_attempt,
-            validation_error=validation_error,
+            attempt,
+            validation_error=(
+                _validation_error_for_candidate(
+                    item
+                )
+            ),
         )
 
         if failure_label is None:
-            skipped.append(candidate_id)
-            continue
-
-        source_code = item.validated_code or item.raw_code
-        if not source_code:
-            skipped.append(candidate_id)
-            failures[candidate_id] = "No candidate source code was available for repair."
-            continue
-
-        source_attempt_count = len(
-            candidate.attempts
-        )
-        source_status = (
-            candidate.current_status
-        )
-        source_hard_failures = list(
-            candidate.hard_failures
-        )
-        source_warnings = list(
-            candidate.warnings
-        )
-        source_validated_code = (
-            item.validated_code
-        )
-        source_workspace = (
-            item.workspace
-        )
-        source_solver_path = (
-            item.solver_path
-        )
-        source_execution = (
-            item.execution
-        )
-
-        if not repair_budget.can_reserve():
-            skipped.append(candidate_id)
-            failures[candidate_id] = "Targeted repair budget is exhausted."
-            continue
-
-        if (
-            repairer.uses_model_budget
-            and run_context.budget.remaining_model_calls <= 0
-        ):
-            skipped.append(candidate_id)
-            failures[candidate_id] = "Global model-call budget is exhausted."
-            continue
-
-        try:
-            brief = build_repair_brief(
-                attempt=source_attempt,
-                budget=repair_budget,
-                validation_error=validation_error,
-            )
-        except RepairBudgetExceeded as exc:
-            skipped.append(candidate_id)
-            failures[candidate_id] = _bounded_error(exc)
-            continue
-        except Exception as exc:
-            skipped.append(candidate_id)
-            failures[candidate_id] = (
-                "Repair brief construction failed: "
-                f"{_bounded_error(exc)}"
+            nonrepairable_ids.append(
+                item.candidate.candidate_id
             )
             continue
 
-        if brief is None:
-            skipped.append(candidate_id)
-            continue
-
-        if repairer.uses_model_budget:
-            try:
-                run_context.budget.reserve_model_call()
-            except RunBudgetExceeded as exc:
-                skipped.append(candidate_id)
-                failures[candidate_id] = _bounded_error(exc)
-                continue
-
-        attempted.append(candidate_id)
-
-        request = RepairRequest(
-            candidate_id=candidate_id,
-            candidate_seed=item.candidate_seed,
-            source_code=source_code,
-            brief=brief,
-            specification=specification,
-            compiled_specification=compiled_specification,
+        repairable_items.append(
+            item
         )
 
-        repair_start = time.perf_counter()
+    repairable_items.sort(
+        key=_repair_priority_key
+    )
 
-        try:
-            repaired_candidate = repairer.repair(request)
-        except Exception as exc:
-            elapsed = time.perf_counter() - repair_start
-            repair_budget.record_usage(tokens=0, wall_seconds=elapsed)
-            candidate.current_status = "repair_generation_failed"
-            failures[candidate_id] = _bounded_error(exc)
-            continue
+    skipped.extend(
+        nonrepairable_ids
+    )
 
-        repair_elapsed = time.perf_counter() - repair_start
+    # Preserve one of the default three repair slots for a
+    # publication-rescue attempt. For three-candidate hard tasks,
+    # this means two closest candidates get a first repair, then the
+    # reserved slot either deepens an improving candidate or falls
+    # back to the next untried candidate.
+    available_slots = (
+        repair_budget.remaining_attempts
+    )
 
-        repair_budget.record_usage(
-            tokens=repaired_candidate.tokens_used,
-            wall_seconds=repair_elapsed,
+    first_wave_limit = min(
+        len(repairable_items),
+        max(
+            1,
+            available_slots - 1,
+        )
+        if available_slots > 0
+        else 0,
+    )
+
+    first_wave = (
+        repairable_items[
+            :first_wave_limit
+        ]
+    )
+
+    deferred = list(
+        repairable_items[
+            first_wave_limit:
+        ]
+    )
+
+    improving_items: list[
+        CandidateProductionItem
+    ] = []
+
+    attempted_items: list[
+        CandidateProductionItem
+    ] = []
+
+    for item in first_wave:
+        candidate_id = (
+            item.candidate.candidate_id
         )
 
-        if repaired_candidate.tokens_used:
-            run_context.budget.record_tokens(repaired_candidate.tokens_used)
-
-        _record_repair_strategy(
+        outcome = _repair_one_item(
             item=item,
-            brief=brief,
+            task_dir=task_dir,
+            repair_workspace_base_dir=(
+                repair_workspace_base_dir
+            ),
+            run_context=run_context,
+            quality=quality,
+            specification=specification,
+            compiled_specification=(
+                compiled_specification
+            ),
             repairer=repairer,
-            tokens_used=repaired_candidate.tokens_used,
-        )
-
-        try:
-            validated_code = validate_python_code(repaired_candidate.code)
-        except Exception as exc:
-            error = f"{type(exc).__name__}: {_bounded_error(exc)}"
-            _code_validation_attempt(
-                item=item,
-                error=error,
-                repair_reason=brief.strategy,
-                repaired=True,
-            )
-            failures[candidate_id] = error
-            continue
-
-        try:
-            run_context.budget.reserve_candidate_attempt()
-        except RunBudgetExceeded as exc:
-            candidate.current_status = "repair_execution_budget_exhausted"
-            failures[candidate_id] = _bounded_error(exc)
-            continue
-
-        next_attempt_number = len(candidate.attempts) + 1
-
-        repair_attempt_base = (
-            repair_workspace_base_dir
-            / f"attempt_{next_attempt_number}"
-        )
-
-        try:
-            workspace = CandidateWorkspace.create(
-                base_dir=repair_attempt_base,
-                candidate_id=candidate_id,
-                task_dir=task_dir,
-            )
-
-            solver_path = workspace.source_dir / "solver.py"
-            solver_path.write_text(
-                validated_code,
-                encoding="utf-8",
-            )
-
-            timeout = run_context.bounded_timeout(
+            repair_budget=repair_budget,
+            execution_timeout_seconds=(
                 execution_timeout_seconds
-            )
-
-            execution = run_candidate(
-                workspace,
-                solver_path,
-                timeout_seconds=timeout,
-                env_overrides=_candidate_environment(
-                    item.candidate_seed
-                ),
-            )
-        except Exception as exc:
-            candidate.current_status = "repair_execution_infrastructure_failed"
-            failures[candidate_id] = _bounded_error(exc)
-            continue
-
-        item.validated_code = validated_code
-        item.workspace = workspace
-        item.solver_path = solver_path
-        item.execution = execution
-
-        attempt = collect_execution_evidence(
-            execution=execution,
-            output_dir=workspace.output_dir,
-            required_output_paths=specification.required_output_paths,
-            attempt_number=next_attempt_number,
-            solver_path=solver_path,
+            ),
+            data_inspections=(
+                data_inspections
+            ),
         )
 
-        attempt.repair_reason = brief.strategy
-
-        try:
-            evaluate_collected_attempt(
-                candidate=candidate,
-                attempt=attempt,
-                output_dir=workspace.output_dir,
-                required_output_paths=specification.required_output_paths,
-                required_columns=compiled_specification.required_columns,
-                schema_expectations=quality.schema_expectations,
-                compiled_specification=compiled_specification,
+        if outcome.attempted:
+            attempted.append(
+                candidate_id
             )
-        except Exception as exc:
-            attempt.structural_evidence.append(
-                _repair_evaluation_error(exc)
+            attempted_items.append(
+                item
+            )
+        else:
+            skipped.append(
+                candidate_id
             )
 
-            if candidate.latest_attempt() is not attempt:
-                candidate.add_attempt(attempt)
+        if outcome.failure:
+            failures[
+                candidate_id
+            ] = outcome.failure
 
-            candidate.current_status = "repair_evaluation_failed"
-            candidate.hard_failures = [
-                "Repaired candidate evaluation failed."
-            ]
-            failures[candidate_id] = _bounded_error(exc)
-            continue
+        if outcome.validated:
+            if candidate_id not in repaired:
+                repaired.append(
+                    candidate_id
+                )
 
-        repaired_attempt = (
-            candidate.latest_attempt()
+        elif outcome.improved:
+            improving_items.append(
+                item
+            )
+
+    has_publishable_candidate = any(
+        _attempt_is_publishable(
+            item.candidate.latest_attempt()
+        )
+        for item in all_items
+    )
+
+    rescue_item = None
+
+    if (
+        not has_publishable_candidate
+        and repair_budget.can_reserve()
+        and (
+            run_context
+            .budget
+            .remaining_candidate_attempts
+            > 0
+        )
+        and (
+            not repairer.uses_model_budget
+            or (
+                run_context
+                .budget
+                .remaining_model_calls
+                > 0
+            )
+        )
+    ):
+        if improving_items:
+            rescue_item = min(
+                improving_items,
+                key=_repair_priority_key,
+            )
+
+        elif deferred:
+            # If no first repair improved, do not waste the reserved
+            # slot: give the next-closest untouched candidate its
+            # first repair.
+            rescue_item = deferred.pop(0)
+
+        elif attempted_items:
+            # One final bounded second shot. The repair prompt sees
+            # the incremented repair-attempt number and is explicitly
+            # told to re-derive rather than repeat the same patch.
+            rescue_item = min(
+                attempted_items,
+                key=_repair_priority_key,
+            )
+
+    if rescue_item is not None:
+        candidate_id = (
+            rescue_item
+            .candidate
+            .candidate_id
         )
 
-        if (
-            repaired_attempt is not None
-            and _attempt_quality_key(
-                repaired_attempt
-            )
-            >= _attempt_quality_key(
-                source_attempt
-            )
-        ):
-            # A repair is advisory. If it is not strictly better,
-            # restore the previous candidate and its execution artifacts.
-            del candidate.attempts[
-                source_attempt_count:
-            ]
+        outcome = _repair_one_item(
+            item=rescue_item,
+            task_dir=task_dir,
+            repair_workspace_base_dir=(
+                repair_workspace_base_dir
+            ),
+            run_context=run_context,
+            quality=quality,
+            specification=specification,
+            compiled_specification=(
+                compiled_specification
+            ),
+            repairer=repairer,
+            repair_budget=repair_budget,
+            execution_timeout_seconds=(
+                execution_timeout_seconds
+            ),
+            data_inspections=(
+                data_inspections
+            ),
+        )
 
-            candidate.current_status = (
-                source_status
+        if outcome.attempted:
+            attempted.append(
+                candidate_id
             )
-            candidate.hard_failures = (
-                source_hard_failures
-            )
-            candidate.warnings = (
-                source_warnings
+        else:
+            if candidate_id not in skipped:
+                skipped.append(
+                    candidate_id
+                )
+
+        if outcome.failure:
+            failures[
+                candidate_id
+            ] = outcome.failure
+
+        if outcome.validated:
+            if candidate_id not in repaired:
+                repaired.append(
+                    candidate_id
+                )
+
+    for item in deferred:
+        candidate_id = (
+            item.candidate.candidate_id
+        )
+
+        if candidate_id not in skipped:
+            skipped.append(
+                candidate_id
             )
 
-            item.validated_code = (
-                source_validated_code
-            )
-            item.workspace = (
-                source_workspace
-            )
-            item.solver_path = (
-                source_solver_path
-            )
-            item.execution = (
-                source_execution
-            )
+        if candidate_id not in failures:
+            if not repair_budget.can_reserve():
+                failures[candidate_id] = (
+                    "Targeted repair budget is exhausted."
+                )
 
-            failures[candidate_id] = (
-                "Repair was not a strict improvement; "
-                "restored the previous candidate attempt."
-            )
-            continue
+            elif (
+                repairer.uses_model_budget
+                and (
+                    run_context
+                    .budget
+                    .remaining_model_calls
+                    <= 0
+                )
+            ):
+                failures[candidate_id] = (
+                    "Global model-call budget is exhausted."
+                )
 
-        if candidate.current_status == "validated":
-            repaired.append(candidate_id)
+            elif (
+                run_context
+                .budget
+                .remaining_candidate_attempts
+                <= 0
+            ):
+                failures[candidate_id] = (
+                    "Global candidate-attempt budget is exhausted."
+                )
+
+            elif has_publishable_candidate:
+                failures[candidate_id] = (
+                    "Skipped because a publishable candidate "
+                    "already exists."
+                )
+
+            else:
+                failures[candidate_id] = (
+                    "Skipped after publication-rescue prioritization."
+                )
+
+    skipped[:] = sorted(
+        set(skipped)
+    )
 
     state.complete_stage(
         stage,

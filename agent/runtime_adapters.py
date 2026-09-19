@@ -295,6 +295,14 @@ def _build_repair_prompt(
         "precision_guidance": build_precision_guidance(
             request.specification.instruction_text
         ),
+        "data_inspections": (
+            getattr(
+                request,
+                "data_inspections",
+                None,
+            )
+            or {}
+        ),
         "source_code": request.source_code,
     }
 
@@ -332,6 +340,8 @@ Security and contract requirements:
 
 Repair requirements:
 - Fix the root cause identified by the repair brief.
+- Use the supplied data inspections to verify actual task-data filenames, columns, shapes and dtypes instead of guessing the input contract.
+- If this is repair attempt 2 or later, re-derive the failing logic from the explicit task contract and current failure evidence; do not blindly repeat the previous patch pattern.
 - Preserve correct parts of the original solution.
 - Do not hardcode expected benchmark answers.
 - Recheck syntax, imports, output paths, schema, dtypes, identifiers, financial invariants, and numerical edge cases before returning code.
