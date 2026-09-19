@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import csv
 from datetime import datetime, timezone
+import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -59,6 +61,21 @@ def write_json(
         + "\n",
         encoding="utf-8",
     )
+
+
+def sha256_file(
+    path: Path,
+) -> str:
+    digest = hashlib.sha256()
+
+    with path.open("rb") as handle:
+        for chunk in iter(
+            lambda: handle.read(1024 * 1024),
+            b"",
+        ):
+            digest.update(chunk)
+
+    return digest.hexdigest()
 
 
 def read_card(
@@ -209,6 +226,14 @@ def load_inventory(
         path
     )
 
+    if not isinstance(
+        payload,
+        dict,
+    ):
+        raise SystemExit(
+            "Inventory JSON must contain an object."
+        )
+
     units = payload.get(
         "units"
     )
@@ -225,14 +250,30 @@ def load_inventory(
         dict[str, Any]
     ] = []
 
-    for item in units:
-        if isinstance(
+    for index, item in enumerate(units):
+        if not isinstance(
             item,
             dict,
         ):
-            result.append(
-                item
+            raise SystemExit(
+                f"Inventory unit at index {index} must be an object."
             )
+
+        unit_dir = item.get(
+            "unit_dir"
+        )
+
+        if not isinstance(
+            unit_dir,
+            str,
+        ) or not unit_dir.strip():
+            raise SystemExit(
+                f"Inventory unit at index {index} has an invalid unit_dir."
+            )
+
+        result.append(
+            item
+        )
 
     return result
 
@@ -242,7 +283,20 @@ def select_units(
     requested: list[str],
     limit: int | None,
 ) -> list[dict[str, Any]]:
+    if (
+        limit is not None
+        and limit <= 0
+    ):
+        raise SystemExit(
+            "--limit must be positive."
+        )
+
     if requested:
+        if len(set(requested)) != len(requested):
+            raise SystemExit(
+                "Duplicate --unit values are not allowed."
+            )
+
         by_name = {
             str(
                 item.get(
@@ -287,6 +341,118 @@ def select_units(
         ]
 
     return selected
+
+
+def validate_unit_name(
+    value: str,
+) -> str:
+    name = value.strip()
+
+    if (
+        not name
+        or Path(name).is_absolute()
+        or ".." in Path(name).parts
+        or Path(name).name != name
+    ):
+        raise SystemExit(
+            f"Invalid unit directory name: {value}"
+        )
+
+    return name
+
+
+def unique_run_name(
+    runs_dir: Path,
+    requested: str | None,
+) -> str:
+    if requested:
+        if (
+            Path(requested).is_absolute()
+            or ".." in Path(requested).parts
+            or Path(requested).name != requested
+            or not requested.strip()
+        ):
+            raise SystemExit(
+                "--run-name must be a non-empty directory name."
+            )
+
+        return requested
+
+    base = datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y%m%dT%H%M%S%fZ"
+    )
+
+    candidate = base
+    suffix = 1
+
+    while (runs_dir / candidate).exists():
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+
+    return candidate
+
+
+def resolve_timeouts(
+    card: dict[str, Any],
+    unit_name: str,
+    timeout_buffer: float,
+) -> tuple[float, float | None, float]:
+    agent_timeout = float(
+        safe_get(
+            card,
+            "agent",
+            "timeout_sec",
+            default=1800.0,
+        )
+    )
+
+    if (
+        not math.isfinite(agent_timeout)
+        or agent_timeout <= 0
+    ):
+        raise ValueError(
+            f"Invalid agent timeout for {unit_name}: "
+            f"{agent_timeout}"
+        )
+
+    raw_verifier_timeout = safe_get(
+        card,
+        "verifier",
+        "timeout_sec",
+        default=None,
+    )
+
+    verifier_timeout = None
+
+    if raw_verifier_timeout is not None:
+        verifier_timeout = float(
+            raw_verifier_timeout
+        )
+
+        if (
+            not math.isfinite(verifier_timeout)
+            or verifier_timeout <= 0
+        ):
+            raise ValueError(
+                f"Invalid verifier timeout for {unit_name}: "
+                f"{verifier_timeout}"
+            )
+
+    outer_timeout = (
+        max(
+            agent_timeout,
+            verifier_timeout or 0.0,
+        )
+        + timeout_buffer
+    )
+
+    return (
+        agent_timeout,
+        verifier_timeout,
+        outer_timeout,
+    )
 
 
 def parse_reward(
@@ -365,6 +531,17 @@ def parse_pytest_report(
             direct
         )
     except Exception:
+        return {
+            "pytest_total": None,
+            "pytest_passed": None,
+            "pytest_failed": None,
+            "failed_tests": [],
+        }
+
+    if not isinstance(
+        report,
+        dict,
+    ):
         return {
             "pytest_total": None,
             "pytest_passed": None,
@@ -472,21 +649,28 @@ def classify_status(
     return_code: int | None,
     timed_out: bool,
     reward: float | None,
+    pytest_failed: int | None = None,
 ) -> str:
     if timed_out:
         return "runner_timeout"
-
-    if reward == 1.0:
-        return "pass"
-
-    if reward == 0.0:
-        return "fail"
 
     if (
         return_code is not None
         and return_code != 0
     ):
         return "harness_error"
+
+    if (
+        pytest_failed is not None
+        and pytest_failed > 0
+    ):
+        return "fail"
+
+    if reward == 1.0:
+        return "pass"
+
+    if reward == 0.0:
+        return "fail"
 
     return "no_reward"
 
@@ -703,6 +887,8 @@ def write_results_csv(
         "reward",
         "elapsed_seconds",
         "agent_timeout_sec",
+        "verifier_timeout_sec",
+        "outer_timeout_sec",
         "qfbench_exit_code",
         "runner_timed_out",
         "pytest_exit_code",
@@ -902,8 +1088,8 @@ def main() -> int:
         )
 
     if (
-        args.timeout_buffer
-        < 0
+        not math.isfinite(args.timeout_buffer)
+        or args.timeout_buffer < 0
     ):
         raise SystemExit(
             "--timeout-buffer must be non-negative."
@@ -992,6 +1178,36 @@ def main() -> int:
                 "MODEL_NAME"
             )
 
+        if not os.environ.get(
+            "MODEL_TOKEN"
+        ):
+            missing.append(
+                "MODEL_TOKEN"
+            )
+
+        seed_text = os.environ.get(
+            "QFBENCH_SEED"
+        )
+
+        if not seed_text:
+            missing.append(
+                "QFBENCH_SEED"
+            )
+        else:
+            try:
+                seed = int(
+                    seed_text
+                )
+            except ValueError:
+                raise SystemExit(
+                    "QFBENCH_SEED must be a non-negative integer."
+                )
+
+            if seed < 0:
+                raise SystemExit(
+                    "QFBENCH_SEED must be a non-negative integer."
+                )
+
         if missing:
             raise SystemExit(
                 "A meaningful model-backed benchmark "
@@ -1014,13 +1230,9 @@ def main() -> int:
         limit=args.limit,
     )
 
-    run_name = (
-        args.run_name
-        or datetime.now(
-            timezone.utc
-        ).strftime(
-            "%Y%m%dT%H%M%SZ"
-        )
+    run_name = unique_run_name(
+        runs_dir,
+        args.run_name,
     )
 
     run_root = (
@@ -1051,6 +1263,9 @@ def main() -> int:
         "inventory": str(
             inventory_path
         ),
+        "inventory_sha256": sha256_file(
+            inventory_path
+        ),
         "agent_image": args.image,
         "agent_image_id": (
             image_id
@@ -1066,6 +1281,18 @@ def main() -> int:
         "model_name": (
             model_name
         ),
+        "qfbench_seed": os.environ.get(
+            "QFBENCH_SEED"
+        ),
+        "timeout_buffer_sec": (
+            args.timeout_buffer
+        ),
+        "runner_options": {
+            "units": list(args.unit),
+            "limit": args.limit,
+            "resume": args.resume,
+            "allow_offline": args.allow_offline,
+        },
         "allow_offline": (
             args.allow_offline
         ),
@@ -1122,10 +1349,12 @@ def main() -> int:
         selected,
         start=1,
     ):
-        unit_name = str(
+        unit_name = validate_unit_name(
+            str(
             inventory_item[
                 "unit_dir"
             ]
+            )
         )
 
         unit_dir = (
@@ -1171,25 +1400,52 @@ def main() -> int:
                 )
                 continue
 
-        card = read_card(
-            unit_dir
-        )
-
-        agent_timeout = float(
-            safe_get(
-                card,
-                "agent",
-                "timeout_sec",
-                default=1800.0,
+        try:
+            card = read_card(
+                unit_dir
             )
-        )
-
-        outer_timeout = (
-            agent_timeout
-            + float(
-                args.timeout_buffer
+            agent_timeout, verifier_timeout, outer_timeout = (
+                resolve_timeouts(
+                    card,
+                    unit_name,
+                    float(args.timeout_buffer),
+                )
             )
-        )
+        except (OSError, TypeError, ValueError) as exc:
+            result = {
+                "unit": unit_name,
+                "category": inventory_item.get("category"),
+                "difficulty": inventory_item.get("difficulty"),
+                "status": "harness_error",
+                "reward": None,
+                "reward_details": str(exc),
+                "elapsed_seconds": 0.0,
+                "agent_timeout_sec": None,
+                "verifier_timeout_sec": None,
+                "outer_timeout_sec": None,
+                "qfbench_exit_code": None,
+                "runner_timed_out": False,
+                "pytest_exit_code": None,
+                "pytest_total": None,
+                "pytest_passed": None,
+                "pytest_failed": None,
+                "failed_tests": [],
+                "deliverables": [],
+                "deliverable_count": 0,
+                "failed_test_count": 0,
+                "output_dir": str(output_dir),
+                "log_path": str(log_path),
+            }
+            write_json(
+                result_path,
+                result,
+            )
+            results.append(result)
+            print(
+                f"  status: {result['status']} ({exc})"
+            )
+            print()
+            continue
 
         print(
             f"[{index}/{len(selected)}] "
@@ -1279,6 +1535,9 @@ def main() -> int:
             return_code=return_code,
             timed_out=timed_out,
             reward=reward,
+              pytest_failed=pytest_summary[
+                  "pytest_failed"
+              ],
         )
 
         result = {
@@ -1300,6 +1559,9 @@ def main() -> int:
             ),
             "agent_timeout_sec": (
                 agent_timeout
+            ),
+            "verifier_timeout_sec": (
+                verifier_timeout
             ),
             "outer_timeout_sec": (
                 outer_timeout
