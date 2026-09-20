@@ -74,6 +74,10 @@ from agent.offline_asian_options import (
     AsianOptionSkill,
 )
 
+from agent.offline_option_parity_audit import (
+    OptionParityAuditSkill,
+)
+
 from agent.offline_variance_swap import (
     VarianceSwapReplicationSkill,
 )
@@ -658,6 +662,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     FixedIncomeCurveSkill(),
     LookbackOptionSkill(),
     AsianOptionSkill(),
+    OptionParityAuditSkill(),
     VarianceSwapReplicationSkill(),
     TwoAssetDerivativesSkill(),
     FilingEventAlphaSkill(),
