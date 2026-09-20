@@ -62,6 +62,10 @@ from agent.offline_derivatives import (
     TwoAssetDerivativesSkill,
 )
 
+from agent.offline_macro_event_study import (
+    MacroTextEventStudySkill,
+)
+
 from agent.offline_event_study import (
     EventStudySkill,
 )
@@ -627,6 +631,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     FixedIncomeCurveSkill(),
     AsianOptionSkill(),
     TwoAssetDerivativesSkill(),
+    MacroTextEventStudySkill(),
     EventStudySkill(),
     IntradayRealizedVolatilitySkill(),
     OhlcVolatilitySkill(),
