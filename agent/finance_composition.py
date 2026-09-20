@@ -66,6 +66,10 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
         caps.add("grs_joint_alpha_test")
     if _contains(text, "rolling", "rolling window") and "beta" in text:
         caps.add("rolling_factor_beta")
+    if _contains(text, "variance inflation", "vif"):
+        caps.add("vif")
+    if _contains(text, "durbin-watson", "durbin watson"):
+        caps.add("durbin_watson")
 
     if _contains(text, "ema"):
         caps.add("sma_seeded_ema")
@@ -88,6 +92,28 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
         caps.add("var_es")
 
     recipe = None
+
+    factor_required = {
+        "factor_ols",
+        "newey_west_hac",
+        "grs_joint_alpha_test",
+        "rolling_factor_beta",
+    }
+    factor_schema = (
+        catalog.has_csv({"date", "mkt-rf", "smb", "hml", "rf"})
+        and sum(
+            1
+            for artifact in catalog.artifacts
+            if artifact.kind == "csv"
+            and "date" in artifact.columns
+            and len(artifact.columns) >= 3
+            and not {"mkt-rf", "smb", "hml", "rf"}.issubset(artifact.columns)
+        )
+        == 1
+    )
+    if factor_required.issubset(caps) and factor_schema:
+        recipe = "factor-regression-analysis"
+        score += 4
 
     dcc_required = {
         "garch11",

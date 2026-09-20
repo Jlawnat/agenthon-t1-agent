@@ -399,6 +399,351 @@ def _solve_dcc_multivariate_risk(task_dir: Path, out_dir: Path) -> None:
         encoding="utf-8",
     )
 
+
+def _extract_sector_assignments(
+    instruction: str,
+    tickers: list[str],
+) -> dict[str, str]:
+    import re
+
+    known = set(tickers)
+    mapping: dict[str, str] = {}
+
+    for raw in instruction.splitlines():
+        line = raw.strip()
+        if not line.startswith("|"):
+            continue
+        parts = [part.strip() for part in line.strip("|").split("|")]
+        if len(parts) < 2:
+            continue
+        sector = parts[0]
+        if not sector or sector.lower() == "sector" or set(sector) <= {"-", ":"}:
+            continue
+        members = [token.strip() for token in parts[1].split(",")]
+        for ticker in members:
+            if ticker in known:
+                mapping[ticker] = sector
+
+    for raw in instruction.splitlines():
+        match = re.match(r"^\s*-\s*([^:]+):\s*(.+?)\s*$", raw)
+        if not match:
+            continue
+        sector = match.group(1).strip()
+        members = [token.strip() for token in match.group(2).split(",")]
+        for ticker in members:
+            if ticker in known:
+                mapping[ticker] = sector
+
+    return mapping
+
+
+def _solve_factor_regression_analysis(
+    instruction: str,
+    task_dir: Path,
+    out_dir: Path,
+) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from scipy import stats
+
+    from agent.finance_factor_stats import (
+        durbin_watson,
+        grs_joint_alpha_test,
+        newey_west_covariance,
+        ols_with_inference,
+        optimal_newey_west_lag,
+        rolling_ols_coefficient,
+        variance_inflation_factors,
+    )
+
+    catalog = TaskDataCatalog.discover(task_dir)
+
+    factor_artifacts = [
+        artifact
+        for artifact in catalog.artifacts
+        if artifact.kind == "csv"
+        and {"date", "mkt-rf", "smb", "hml", "rf"}.issubset(artifact.columns)
+    ]
+    if len(factor_artifacts) != 1:
+        raise RuntimeError("Expected exactly one daily factor CSV.")
+    factor_path = factor_artifacts[0].path
+
+    price_artifacts = [
+        artifact
+        for artifact in catalog.artifacts
+        if artifact.kind == "csv"
+        and "date" in artifact.columns
+        and len(artifact.columns) >= 3
+        and artifact.path != factor_path
+    ]
+    if len(price_artifacts) != 1:
+        raise RuntimeError("Expected exactly one asset price panel CSV.")
+    price_path = price_artifacts[0].path
+
+    prices = pd.read_csv(price_path)
+    factors = pd.read_csv(factor_path)
+
+    def normalize_date_column(frame: pd.DataFrame) -> pd.DataFrame:
+        date_cols = [c for c in frame.columns if str(c).strip().lower() == "date"]
+        if len(date_cols) != 1:
+            raise RuntimeError("Expected exactly one date column.")
+        frame = frame.copy()
+        frame[date_cols[0]] = pd.to_datetime(frame[date_cols[0]], errors="raise")
+        return frame.set_index(date_cols[0]).sort_index()
+
+    prices = normalize_date_column(prices)
+    factors = normalize_date_column(factors)
+
+    factor_name_map = {str(c).strip().lower(): c for c in factors.columns}
+    required_factor_names = ("mkt-rf", "smb", "hml", "rf")
+    if any(name not in factor_name_map for name in required_factor_names):
+        raise RuntimeError("Required factor columns are missing.")
+
+    prices = prices.apply(pd.to_numeric, errors="coerce")
+    factors = factors.apply(pd.to_numeric, errors="coerce")
+
+    returns = prices.pct_change(fill_method=None).dropna(how="any")
+    common_idx = returns.index.intersection(factors.index)
+    returns = returns.loc[common_idx]
+    factors = factors.loc[common_idx]
+
+    if len(common_idx) <= 260:
+        raise RuntimeError("Factor regression requires more than one trading year.")
+
+    tickers = sorted(str(c) for c in prices.columns)
+    if len(tickers) < 2:
+        raise RuntimeError("Factor regression requires multiple assets.")
+
+    rf = factors[factor_name_map["rf"]]
+    excess_returns = returns.subtract(rf, axis=0)
+
+    factor_matrix = np.column_stack(
+        [
+            factors[factor_name_map["mkt-rf"]].to_numpy(dtype=float),
+            factors[factor_name_map["smb"]].to_numpy(dtype=float),
+            factors[factor_name_map["hml"]].to_numpy(dtype=float),
+        ]
+    )
+    n_obs = len(common_idx)
+    design = np.column_stack([np.ones(n_obs), factor_matrix])
+    nw_lag = optimal_newey_west_lag(n_obs)
+
+    stock_results: dict[str, dict[str, float]] = {}
+    residual_matrix = np.zeros((n_obs, len(tickers)), dtype=float)
+    alpha_vector = np.zeros(len(tickers), dtype=float)
+    rolling_data: dict[str, np.ndarray] = {}
+
+    for column_index, ticker in enumerate(tickers):
+        y = excess_returns[ticker].to_numpy(dtype=float)
+        fit = ols_with_inference(design, y)
+        beta = fit.coefficients
+
+        nw_cov = newey_west_covariance(design, fit.residuals, lag=nw_lag)
+        nw_se = np.sqrt(np.maximum(np.diag(nw_cov), 0.0))
+        t_alpha_nw = float(beta[0] / nw_se[0]) if nw_se[0] > 0.0 else 0.0
+        p_alpha_nw = float(
+            2.0 * stats.t.sf(abs(t_alpha_nw), df=fit.degrees_of_freedom)
+        )
+
+        alpha_vector[column_index] = beta[0]
+        residual_matrix[:, column_index] = fit.residuals
+
+        annual_alpha = float(beta[0] * 252.0)
+        annual_excess_return = float(np.mean(y) * 252.0)
+        annual_residual_std = float(np.std(fit.residuals, ddof=1) * math.sqrt(252.0))
+        information_ratio = (
+            annual_alpha / annual_residual_std if annual_residual_std > 0.0 else 0.0
+        )
+        treynor = annual_excess_return / beta[1] if beta[1] != 0.0 else 0.0
+
+        rolling = rolling_ols_coefficient(
+            design,
+            y,
+            window=252,
+            coefficient_index=1,
+        )
+        rolling_data[ticker] = rolling
+
+        stock_results[ticker] = {
+            "alpha_daily": round(float(beta[0]), 8),
+            "alpha_annualized": round(annual_alpha, 6),
+            "beta_mkt": round(float(beta[1]), 6),
+            "beta_smb": round(float(beta[2]), 6),
+            "beta_hml": round(float(beta[3]), 6),
+            "r_squared": round(fit.r_squared, 6),
+            "adj_r_squared": round(fit.adjusted_r_squared, 6),
+            "t_stat_alpha": round(float(fit.t_statistics[0]), 4),
+            "p_value_alpha": round(float(fit.p_values[0]), 6),
+            "t_stat_alpha_nw": round(t_alpha_nw, 4),
+            "p_value_alpha_nw": round(p_alpha_nw, 6),
+            "durbin_watson": round(durbin_watson(fit.residuals), 6),
+            "information_ratio": round(float(information_ratio), 6),
+            "treynor_ratio": round(float(treynor), 6),
+            "ann_excess_return": round(annual_excess_return, 6),
+            "rolling_beta_mkt_mean": round(float(np.mean(rolling)), 6),
+            "rolling_beta_mkt_std": round(float(np.std(rolling, ddof=1)), 6),
+            "rolling_beta_mkt_min": round(float(np.min(rolling)), 6),
+            "rolling_beta_mkt_max": round(float(np.max(rolling)), 6),
+        }
+
+    alpha_ranking = sorted(
+        tickers,
+        key=lambda ticker: stock_results[ticker]["alpha_annualized"],
+        reverse=True,
+    )
+
+    grs = grs_joint_alpha_test(alpha_vector, residual_matrix, factor_matrix)
+    vif = variance_inflation_factors(factor_matrix)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    rolling_dates = common_idx[251:]
+    rolling_frame = pd.DataFrame({"date": rolling_dates})
+    for ticker in tickers:
+        rolling_frame[ticker] = rolling_data[ticker]
+    rolling_frame.to_csv(out_dir / "rolling_betas.csv", index=False)
+
+    results = {
+        "meta": {
+            "trading_days": int(n_obs),
+            "start_date": str(common_idx.min().date()),
+            "end_date": str(common_idx.max().date()),
+            "num_stocks": len(tickers),
+            "nw_lag": int(nw_lag),
+        },
+        "stocks": stock_results,
+        "alpha_ranking": alpha_ranking,
+        "grs_test": {
+            "grs_statistic": round(grs.statistic, 4),
+            "grs_p_value": round(grs.p_value, 6),
+            "grs_rejected": bool(grs.p_value < 0.05),
+            "df1": grs.df1,
+            "df2": grs.df2,
+        },
+        "factor_diagnostics": {
+            "vif_mkt_rf": round(float(vif[0]), 4),
+            "vif_smb": round(float(vif[1]), 4),
+            "vif_hml": round(float(vif[2]), 4),
+            "nw_lag": int(nw_lag),
+        },
+    }
+    (out_dir / "results.json").write_text(
+        json.dumps(results, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    summary_rows = []
+    for ticker in tickers:
+        item = stock_results[ticker]
+        summary_rows.append({
+            "ticker": ticker,
+            "alpha_annualized": item["alpha_annualized"],
+            "beta_mkt": item["beta_mkt"],
+            "beta_smb": item["beta_smb"],
+            "beta_hml": item["beta_hml"],
+            "r_squared": item["r_squared"],
+            "adj_r_squared": item["adj_r_squared"],
+            "t_stat_alpha": item["t_stat_alpha"],
+            "p_value_alpha": item["p_value_alpha"],
+            "t_stat_alpha_nw": item["t_stat_alpha_nw"],
+            "p_value_alpha_nw": item["p_value_alpha_nw"],
+            "durbin_watson": item["durbin_watson"],
+            "information_ratio": item["information_ratio"],
+            "treynor_ratio": item["treynor_ratio"],
+        })
+    pd.DataFrame(summary_rows).to_csv(
+        out_dir / "regression_summary.csv",
+        index=False,
+    )
+
+    sector_map = _extract_sector_assignments(instruction, tickers)
+    if set(sector_map) != set(tickers):
+        missing = sorted(set(tickers) - set(sector_map))
+        raise RuntimeError(
+            "Could not recover sector assignments for: " + ", ".join(missing)
+        )
+
+    sector_rows = []
+    for sector in sorted(set(sector_map.values())):
+        members = [ticker for ticker in tickers if sector_map[ticker] == sector]
+        sector_rows.append({
+            "sector": sector,
+            "avg_alpha_annualized": round(
+                float(np.mean([stock_results[t]["alpha_annualized"] for t in members])), 6
+            ),
+            "avg_beta_mkt": round(
+                float(np.mean([stock_results[t]["beta_mkt"] for t in members])), 6
+            ),
+            "avg_r_squared": round(
+                float(np.mean([stock_results[t]["r_squared"] for t in members])), 6
+            ),
+        })
+    pd.DataFrame(sector_rows).to_csv(
+        out_dir / "sector_summary.csv",
+        index=False,
+    )
+
+    x = np.arange(len(tickers))
+    width = 0.25
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+    ax.bar(x - width, [stock_results[t]["beta_mkt"] for t in tickers], width, label="Mkt-RF")
+    ax.bar(x, [stock_results[t]["beta_smb"] for t in tickers], width, label="SMB")
+    ax.bar(x + width, [stock_results[t]["beta_hml"] for t in tickers], width, label="HML")
+    ax.set_xticks(x)
+    ax.set_xticklabels(tickers, rotation=45)
+    ax.set_ylabel("Factor Loading")
+    ax.set_title("Fama-French 3-Factor Loadings")
+    ax.legend()
+    ax.axhline(y=0.0, linewidth=0.5)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_dir / "factor_loadings.png", dpi=100)
+    plt.close(fig)
+
+    ranked = alpha_ranking
+    alphas = [stock_results[t]["alpha_annualized"] for t in ranked]
+    labels = [
+        f"{ticker} *" if stock_results[ticker]["p_value_alpha_nw"] < 0.05 else ticker
+        for ticker in ranked
+    ]
+    fig, ax = plt.subplots(figsize=(10, 7))
+    ax.barh(range(len(ranked)), alphas)
+    ax.set_yticks(range(len(ranked)))
+    ax.set_yticklabels(labels)
+    ax.set_xlabel("Annualized Alpha")
+    ax.set_title("Annualized Jensen's Alpha (NW significance)")
+    ax.axvline(x=0.0, linewidth=0.5)
+    ax.grid(axis="x", alpha=0.3)
+    ax.invert_yaxis()
+    fig.tight_layout()
+    fig.savefig(out_dir / "alpha_chart.png", dpi=100)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.bar(tickers, [stock_results[t]["r_squared"] for t in tickers])
+    ax.set_ylabel("R-squared")
+    ax.set_title("R-squared — Fama-French 3-Factor Model")
+    ax.set_ylim(0.0, 1.0)
+    ax.grid(axis="y", alpha=0.3)
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    fig.savefig(out_dir / "r_squared_chart.png", dpi=100)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(14, 8))
+    for ticker in tickers:
+        ax.plot(rolling_dates, rolling_data[ticker], label=ticker, alpha=0.7)
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Rolling Market Beta (252-day)")
+    ax.set_title("Rolling 252-Day Market Beta")
+    ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_dir / "rolling_betas.png", dpi=100)
+    plt.close(fig)
+
 @dataclass(frozen=True)
 class CompositeFinanceSkill:
     name: str = "finance-composition-domain"
@@ -416,6 +761,9 @@ class CompositeFinanceSkill:
     ) -> None:
         del seed
         plan = plan_finance_task(instruction, task_dir)
+        if plan.executable_recipe == "factor-regression-analysis":
+            _solve_factor_regression_analysis(instruction, task_dir, out_dir)
+            return
         if plan.executable_recipe == "dcc-multivariate-risk":
             _solve_dcc_multivariate_risk(task_dir, out_dir)
             return
