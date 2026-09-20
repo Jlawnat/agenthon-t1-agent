@@ -54,6 +54,10 @@ from agent.offline_volatility import (
     OhlcVolatilitySkill,
 )
 
+from agent.offline_router import (
+    select_fallback_skill,
+)
+
 class OfflineSkill(Protocol):
     name: str
 
@@ -627,7 +631,23 @@ def solve_offline(
             )
             return skill.name
 
+    fallback = select_fallback_skill(
+        instruction=instruction,
+        task_dir=task_dir,
+        skills=_SKILLS,
+    )
+
+    if fallback is not None:
+        fallback.solve(
+            instruction=instruction,
+            task_dir=task_dir,
+            out_dir=out_dir,
+            seed=seed,
+        )
+        return fallback.name
+
     raise RuntimeError(
         "No offline solver skill matched this task. "
-        "Model runtime is unavailable."
+        "No sufficiently confident generic capability route "
+        "was found. Model runtime is unavailable."
     )
