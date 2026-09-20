@@ -50,6 +50,10 @@ from agent.offline_fixed_income import (
     FixedIncomeCurveSkill,
 )
 
+from agent.offline_asian_options import (
+    AsianOptionSkill,
+)
+
 from agent.offline_derivatives import (
     TwoAssetDerivativesSkill,
 )
@@ -616,6 +620,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     DistributionRiskSkill(),
     MarketRiskSkill(),
     FixedIncomeCurveSkill(),
+    AsianOptionSkill(),
     TwoAssetDerivativesSkill(),
     EventStudySkill(),
     IntradayRealizedVolatilitySkill(),
