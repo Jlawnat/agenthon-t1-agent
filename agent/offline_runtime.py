@@ -13,6 +13,10 @@ from agent.offline_bollinger import (
     BollingerBacktestSkill,
 )
 
+from agent.offline_time_series_strategy import (
+    TimeSeriesStrategySkill,
+)
+
 from agent.offline_brinson import (
     BrinsonSectorAttributionSkill,
 )
@@ -595,6 +599,7 @@ class BlackScholesGreeksSkill:
 _SKILLS: tuple[OfflineSkill, ...] = (
     BlackScholesGreeksSkill(),
     BollingerBacktestSkill(),
+    TimeSeriesStrategySkill(),
     BrinsonSectorAttributionSkill(),
     CirBondPricingSkill(),
     BinanceParticipationTcaSkill(),
