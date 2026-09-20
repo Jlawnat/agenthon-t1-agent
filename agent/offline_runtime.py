@@ -25,6 +25,10 @@ from agent.offline_tca import (
     BinanceParticipationTcaSkill,
 )
 
+from agent.offline_alpha import (
+    AlphaHedgeStrategySkill,
+)
+
 
 class OfflineSkill(Protocol):
     name: str
@@ -566,6 +570,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     BrinsonSectorAttributionSkill(),
     CirBondPricingSkill(),
     BinanceParticipationTcaSkill(),
+    AlphaHedgeStrategySkill(),
 )
 
 
