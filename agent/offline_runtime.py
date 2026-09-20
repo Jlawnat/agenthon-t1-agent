@@ -17,6 +17,10 @@ from agent.offline_brinson import (
     BrinsonSectorAttributionSkill,
 )
 
+from agent.offline_cir import (
+    CirBondPricingSkill,
+)
+
 
 class OfflineSkill(Protocol):
     name: str
@@ -556,6 +560,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     BlackScholesGreeksSkill(),
     BollingerBacktestSkill(),
     BrinsonSectorAttributionSkill(),
+    CirBondPricingSkill(),
 )
 
 
