@@ -88,6 +88,35 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
         caps.add("var_es")
 
     recipe = None
+
+    dcc_required = {
+        "garch11",
+        "standardized_residuals",
+        "dcc_correlation",
+        "stationary_bootstrap",
+        "kupiec_backtest",
+        "christoffersen_backtest",
+        "var_es",
+    }
+    dcc_schema = False
+    for price_artifact in catalog.artifacts:
+        if (
+            price_artifact.kind != "csv"
+            or "date" not in price_artifact.columns
+            or len(price_artifact.columns) < 3
+        ):
+            continue
+        series_keys = frozenset(c for c in price_artifact.columns if c != "date")
+        if any(
+            artifact.kind == "json" and artifact.json_keys == series_keys
+            for artifact in catalog.artifacts
+        ):
+            dcc_schema = True
+            break
+    if dcc_required.issubset(caps) and dcc_schema:
+        recipe = "dcc-multivariate-risk"
+        score += 4
+
     cta_required = {
         "garch11",
         "sma_seeded_ema",

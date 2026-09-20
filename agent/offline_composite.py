@@ -9,6 +9,15 @@ import numpy as np
 import pandas as pd
 
 from agent.finance_composition import plan_finance_task
+from agent.finance_multivariate import (
+    conditional_covariance_path,
+    coverage_backtest,
+    filtered_historical_var_es,
+    fit_dcc_qml,
+    portfolio_conditional_volatility,
+    standardized_residuals,
+    stationary_bootstrap_rows,
+)
 from agent.finance_primitives import (
     central_price_delta,
     discount_cashflow,
@@ -235,6 +244,161 @@ def _solve_volatility_target_strategy(task_dir: Path, out_dir: Path) -> None:
     )
 
 
+
+def _find_series_weight_mapping(
+    catalog: TaskDataCatalog,
+    asset_columns: list[str],
+) -> tuple[Path, np.ndarray]:
+    wanted = {str(c).strip().lower() for c in asset_columns}
+    matches: list[tuple[Path, np.ndarray]] = []
+    for artifact in catalog.artifacts:
+        if artifact.kind != "json" or set(artifact.json_keys) != wanted:
+            continue
+        try:
+            value = json.loads(artifact.path.read_text(encoding="utf-8"))
+            lower = {str(k).strip().lower(): float(v) for k, v in value.items()}
+            weights = np.asarray([lower[str(c).strip().lower()] for c in asset_columns], dtype=float)
+        except Exception:
+            continue
+        if np.all(np.isfinite(weights)):
+            matches.append((artifact.path, weights))
+    if len(matches) != 1:
+        raise RuntimeError(
+            "Expected exactly one numeric JSON mapping keyed by the price-series columns."
+        )
+    return matches[0]
+
+
+def _solve_dcc_multivariate_risk(task_dir: Path, out_dir: Path) -> None:
+    from scipy.stats import norm
+
+    catalog = TaskDataCatalog.discover(task_dir)
+    prices_path = catalog.csv_with_columns({"date"}, min_extra_columns=2)
+    frame = pd.read_csv(prices_path)
+    asset_cols = [c for c in frame.columns if str(c).strip().lower() != "date"]
+    if len(asset_cols) < 2:
+        raise RuntimeError("DCC portfolio risk requires at least two assets.")
+
+    prices = frame[asset_cols].to_numpy(dtype=float)
+    if prices.shape[0] < 20 or np.any(prices <= 0.0) or not np.all(np.isfinite(prices)):
+        raise RuntimeError("Price panel contains invalid or insufficient observations.")
+    dates = frame["date"].astype(str).iloc[1:].reset_index(drop=True)
+    returns = np.log(prices[1:] / prices[:-1])
+
+    _, weights = _find_series_weight_mapping(catalog, asset_cols)
+    if not np.isclose(float(np.sum(weights)), 1.0, atol=1e-6):
+        raise RuntimeError("Portfolio weights must sum to one.")
+
+    garch_fits = [fit_garch11_zero_mean(returns[:, j]) for j in range(returns.shape[1])]
+    conditional_variances = np.column_stack(
+        [fit.conditional_variance for fit in garch_fits]
+    )
+    conditional_std = np.sqrt(np.maximum(conditional_variances, 1e-18))
+    z = standardized_residuals(returns, conditional_variances)
+
+    dcc = fit_dcc_qml(z)
+    covariances = conditional_covariance_path(conditional_std, dcc.correlations)
+    portfolio_vol = portfolio_conditional_volatility(covariances, weights)
+    portfolio_returns = returns @ weights
+    annualised_vol = portfolio_vol * math.sqrt(252.0)
+
+    z_1pct = abs(float(norm.ppf(0.01)))
+    var_normal = z_1pct * portfolio_vol
+    es_normal = (
+        float(norm.pdf(norm.ppf(0.01))) / 0.01
+    ) * portfolio_vol
+    violations = (portfolio_returns < -var_normal).astype(int)
+
+    bootstrap_z = stationary_bootstrap_rows(
+        z,
+        n_samples=1000,
+        restart_probability=1.0 / 21.0,
+        seed=42,
+    )
+    var_fhs, es_fhs = filtered_historical_var_es(
+        bootstrap_z,
+        conditional_std,
+        weights,
+        tail_probability=0.01,
+    )
+    backtest = coverage_backtest(violations, expected_rate=0.01)
+
+    garch_rows = []
+    for ticker, fit in zip(asset_cols, garch_fits, strict=True):
+        unconditional_vol = math.sqrt(max(fit.long_run_variance, 0.0)) * math.sqrt(252.0)
+        garch_rows.append(
+            {
+                "ticker": ticker,
+                "omega": fit.omega,
+                "alpha": fit.alpha,
+                "beta": fit.beta,
+                "persistence": fit.persistence,
+                "unconditional_vol": unconditional_vol,
+            }
+        )
+
+    pair_columns: dict[str, np.ndarray] = {}
+    for i in range(len(asset_cols)):
+        for j in range(i + 1, len(asset_cols)):
+            pair_columns[f"{asset_cols[i]}_{asset_cols[j]}"] = dcc.correlations[:, i, j]
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(garch_rows).to_csv(out_dir / "garch_params.csv", index=False)
+
+    (out_dir / "dcc_params.json").write_text(
+        json.dumps(
+            {
+                "dcc_alpha": round(dcc.alpha, 8),
+                "dcc_beta": round(dcc.beta, 8),
+                "dcc_persistence": round(dcc.persistence, 8),
+                "log_likelihood": round(dcc.log_likelihood, 4),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    corr_frame = pd.DataFrame({"date": dates})
+    for name, values in pair_columns.items():
+        corr_frame[name] = values
+    corr_frame.to_csv(out_dir / "dynamic_correlations.csv", index=False)
+
+    pd.DataFrame(
+        {
+            "date": dates,
+            "portfolio_return": portfolio_returns,
+            "conditional_vol": portfolio_vol,
+            "annualised_vol": annualised_vol,
+            "var_1pct": var_normal,
+            "es_1pct": es_normal,
+            "violation": violations,
+            "var_1pct_fhs": var_fhs,
+            "es_1pct_fhs": es_fhs,
+        }
+    ).to_csv(out_dir / "portfolio_var.csv", index=False)
+
+    (out_dir / "backtest_results.json").write_text(
+        json.dumps(
+            {
+                "num_observations": backtest.num_observations,
+                "num_violations": backtest.num_violations,
+                "violation_rate": round(backtest.violation_rate, 6),
+                "expected_rate": 0.01,
+                "kupiec_lr_stat": round(backtest.kupiec_lr_stat, 6),
+                "kupiec_p_value": round(backtest.kupiec_p_value, 6),
+                "reject_h0_kupiec_5pct": bool(backtest.kupiec_p_value < 0.05),
+                "christoffersen_lr_ind": round(backtest.christoffersen_lr_ind, 6),
+                "christoffersen_lr_cc": round(backtest.christoffersen_lr_cc, 6),
+                "christoffersen_p_value": round(backtest.christoffersen_p_value, 6),
+                "reject_h0_cc_5pct": bool(backtest.christoffersen_p_value < 0.05),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
 @dataclass(frozen=True)
 class CompositeFinanceSkill:
     name: str = "finance-composition-domain"
@@ -252,6 +416,9 @@ class CompositeFinanceSkill:
     ) -> None:
         del seed
         plan = plan_finance_task(instruction, task_dir)
+        if plan.executable_recipe == "dcc-multivariate-risk":
+            _solve_dcc_multivariate_risk(task_dir, out_dir)
+            return
         if plan.executable_recipe == "structured-product-risk":
             _solve_structured_product(task_dir, out_dir)
             return
