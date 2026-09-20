@@ -1,0 +1,7 @@
+task	solver_exit	checker_exit	reward
+t1-cme-hdd-option-pricing	1	0	0
+t1-stochvol-implied-surface-new	1	0	0
+t1-sec-10k-report-long	1	0	0
+t1-intraday-volume-fitting-and-execution-scheduling	1	0	0
+t1-13f-amendment-aware-crowding	1	0	0
+t1-first-passage-time	1	0	0
