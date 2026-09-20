@@ -38,6 +38,10 @@ from agent.offline_portfolio import (
     PortfolioStrategySkill,
 )
 
+from agent.offline_credit_portfolio import (
+    CreditPortfolioRiskSkill,
+)
+
 from agent.offline_risk import (
     MarketRiskSkill,
 )
@@ -626,6 +630,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     AlphaHedgeStrategySkill(),
     PortfolioStrategySkill(),
     DistributionRiskSkill(),
+    CreditPortfolioRiskSkill(),
     MarketRiskSkill(),
     DualCurveBootstrapSkill(),
     FixedIncomeCurveSkill(),
