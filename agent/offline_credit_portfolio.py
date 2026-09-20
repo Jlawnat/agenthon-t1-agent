@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -771,6 +772,701 @@ def _round_money(
     )
 
 
+
+
+def _parse_creditmetrics_spec(
+    instruction: str,
+) -> dict[str, object]:
+    """Parse a parameter-only CreditMetrics specification from task text."""
+    header_match = re.search(
+        r"^\|\s*From\\To\s*\|(?P<header>.+?)\|\s*$",
+        instruction,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+
+    if not header_match:
+        raise RuntimeError(
+            "Could not parse CreditMetrics transition-matrix header."
+        )
+
+    states = [
+        cell.strip()
+        for cell in header_match.group(
+            "header"
+        ).split("|")
+        if cell.strip()
+    ]
+
+    if "Default" not in states:
+        raise RuntimeError(
+            "CreditMetrics transition matrix must include Default."
+        )
+
+    rows: dict[str, list[float]] = {}
+
+    for line in instruction.splitlines():
+        if not line.strip().startswith("|"):
+            continue
+
+        cells = [
+            cell.strip()
+            for cell in line.strip().strip("|").split("|")
+        ]
+
+        if (
+            len(cells)
+            != len(states) + 1
+        ):
+            continue
+
+        rating = cells[0]
+
+        if rating not in states:
+            continue
+
+        try:
+            probabilities = [
+                float(
+                    value
+                )
+                / 100.0
+                for value in cells[
+                    1:
+                ]
+            ]
+        except ValueError:
+            continue
+
+        if not np.isclose(
+            sum(
+                probabilities
+            ),
+            1.0,
+            atol=1e-8,
+        ):
+            raise RuntimeError(
+                f"Transition row for {rating} does not sum to 100%."
+            )
+
+        rows[
+            rating
+        ] = probabilities
+
+    distribution_match = re.search(
+        r"Initial rating distribution:\s*(?P<distribution>[^\n]+)",
+        instruction,
+        flags=re.IGNORECASE,
+    )
+
+    if not distribution_match:
+        raise RuntimeError(
+            "Could not parse initial rating distribution."
+        )
+
+    initial_counts: dict[str, int] = {}
+
+    for count, rating in re.findall(
+        r"(\d+)\s+(AAA|AA|A|BBB|BB|B)\b",
+        distribution_match.group(
+            "distribution"
+        ),
+    ):
+        initial_counts[
+            rating
+        ] = int(
+            count
+        )
+
+    if not initial_counts:
+        raise RuntimeError(
+            "Initial rating distribution is empty."
+        )
+
+    missing_rows = (
+        set(
+            initial_counts
+        )
+        - set(
+            rows
+        )
+    )
+
+    if missing_rows:
+        raise RuntimeError(
+            "Transition rows missing for initial ratings: "
+            + ", ".join(
+                sorted(
+                    missing_rows
+                )
+            )
+        )
+
+    face_match = re.search(
+        r"face value\s+([\d,.]+)\s*(million|billion)?",
+        instruction,
+        flags=re.IGNORECASE,
+    )
+
+    if not face_match:
+        raise RuntimeError(
+            "Could not parse bond face value."
+        )
+
+    face_value = float(
+        face_match.group(
+            1
+        ).replace(
+            ",",
+            "",
+        )
+    )
+
+    unit = (
+        face_match.group(
+            2
+        )
+        or ""
+    ).lower()
+
+    if unit == "billion":
+        face_value *= 1000.0
+    elif unit == "million":
+        pass
+    else:
+        face_value /= 1_000_000.0
+
+    recovery_match = re.search(
+        r"(?:recovers|recovery(?: rate)?)\s*(?:=|of|is)?\s*([\d.]+)\s*%",
+        instruction,
+        flags=re.IGNORECASE,
+    )
+
+    if not recovery_match:
+        raise RuntimeError(
+            "Could not parse recovery rate."
+        )
+
+    recovery_rate = float(
+        recovery_match.group(
+            1
+        )
+    ) / 100.0
+
+    rho_match = re.search(
+        r"(?:rho|asset correlation)\s*(?:=|of)?\s*([\d.]+)",
+        instruction,
+        flags=re.IGNORECASE,
+    )
+
+    if not rho_match:
+        raise RuntimeError(
+            "Could not parse asset correlation."
+        )
+
+    rho = float(
+        rho_match.group(
+            1
+        )
+    )
+
+    simulation_match = re.search(
+        r"(?:N_sim|Number of simulations)\s*(?:=|:)?\s*([\d,]+)",
+        instruction,
+        flags=re.IGNORECASE,
+    )
+
+    if not simulation_match:
+        raise RuntimeError(
+            "Could not parse simulation count."
+        )
+
+    n_simulations = int(
+        simulation_match.group(
+            1
+        ).replace(
+            ",",
+            "",
+        )
+    )
+
+    seed_match = re.search(
+        r"(?:Random seed|seed)\s*(?:=|:)?\s*(\d+)",
+        instruction,
+        flags=re.IGNORECASE,
+    )
+
+    if not seed_match:
+        raise RuntimeError(
+            "Could not parse random seed."
+        )
+
+    seed = int(
+        seed_match.group(
+            1
+        )
+    )
+
+    return {
+        "states": states,
+        "transition_rows": rows,
+        "initial_counts": initial_counts,
+        "face_value_millions": float(
+            face_value
+        ),
+        "recovery_rate": float(
+            recovery_rate
+        ),
+        "rho": float(
+            rho
+        ),
+        "n_simulations": int(
+            n_simulations
+        ),
+        "seed": int(
+            seed
+        ),
+    }
+
+
+def _solve_creditmetrics_from_instruction(
+    *,
+    instruction: str,
+    out_dir: Path,
+) -> None:
+    spec = _parse_creditmetrics_spec(
+        instruction
+    )
+
+    states = list(
+        spec[
+            "states"
+        ]
+    )
+
+    transition_rows = dict(
+        spec[
+            "transition_rows"
+        ]
+    )
+
+    initial_counts = dict(
+        spec[
+            "initial_counts"
+        ]
+    )
+
+    face_value = float(
+        spec[
+            "face_value_millions"
+        ]
+    )
+
+    recovery_rate = float(
+        spec[
+            "recovery_rate"
+        ]
+    )
+
+    rho = float(
+        spec[
+            "rho"
+        ]
+    )
+
+    n_simulations = int(
+        spec[
+            "n_simulations"
+        ]
+    )
+
+    base_seed = int(
+        spec[
+            "seed"
+        ]
+    )
+
+    rating_order = {
+        rating: index
+        for index, rating
+        in enumerate(
+            states
+        )
+    }
+
+    default_index = rating_order[
+        "Default"
+    ]
+
+    initial_ratings: list[str] = []
+
+    for rating, count in initial_counts.items():
+        initial_ratings.extend(
+            [
+                rating
+            ]
+            * int(
+                count
+            )
+        )
+
+    n_bonds = len(
+        initial_ratings
+    )
+
+    thresholds: dict[
+        str,
+        np.ndarray,
+    ] = {}
+
+    for rating in initial_counts:
+        probabilities = np.asarray(
+            transition_rows[
+                rating
+            ],
+            dtype=float,
+        )
+
+        reverse_cumulative = np.cumsum(
+            probabilities[
+                ::-1
+            ]
+        )[
+            :-1
+        ]
+
+        thresholds[
+            rating
+        ] = stats.norm.ppf(
+            reverse_cumulative
+        )
+
+    rng = np.random.RandomState(
+        base_seed
+    )
+
+    systematic = rng.standard_normal(
+        (
+            n_simulations,
+            1,
+        )
+    )
+
+    idiosyncratic = rng.standard_normal(
+        (
+            n_simulations,
+            n_bonds,
+        )
+    )
+
+    latent = (
+        math.sqrt(
+            rho
+        )
+        * systematic
+        + math.sqrt(
+            1.0
+            - rho
+        )
+        * idiosyncratic
+    )
+
+    lgd = (
+        1.0
+        - recovery_rate
+    ) * face_value
+
+    losses = np.zeros(
+        n_simulations,
+        dtype=float,
+    )
+
+    upgrade_count = 0
+    downgrade_count = 0
+    default_count = 0
+
+    loss_rows = []
+
+    cursor = 0
+
+    for rating, count in initial_counts.items():
+        count = int(
+            count
+        )
+
+        z = latent[
+            :,
+            cursor:
+            cursor + count
+        ]
+
+        bins = np.digitize(
+            z,
+            thresholds[
+                rating
+            ],
+        )
+
+        outcome_rank = (
+            default_index
+            - bins
+        )
+
+        initial_rank = rating_order[
+            rating
+        ]
+
+        defaults = (
+            outcome_rank
+            == default_index
+        )
+
+        defaults_per_simulation = (
+            defaults.sum(
+                axis=1
+            )
+        )
+
+        category_loss = (
+            defaults_per_simulation
+            * lgd
+        )
+
+        losses += category_loss
+
+        rating_default_count = int(
+            defaults.sum()
+        )
+
+        default_count += (
+            rating_default_count
+        )
+
+        upgrade_count += int(
+            (
+                outcome_rank
+                < initial_rank
+            ).sum()
+        )
+
+        downgrade_count += int(
+            (
+                (
+                    outcome_rank
+                    > initial_rank
+                )
+                & (
+                    outcome_rank
+                    < default_index
+                )
+            ).sum()
+        )
+
+        loss_rows.append(
+            {
+                "initial_rating": (
+                    rating
+                ),
+                "n_bonds": count,
+                "mean_loss": float(
+                    np.mean(
+                        category_loss
+                    )
+                ),
+                "prob_default": float(
+                    rating_default_count
+                    / (
+                        n_simulations
+                        * count
+                    )
+                ),
+            }
+        )
+
+        cursor += count
+
+    quantiles = {
+        0.95: float(
+            np.quantile(
+                losses,
+                0.95,
+            )
+        ),
+        0.99: float(
+            np.quantile(
+                losses,
+                0.99,
+            )
+        ),
+        0.999: float(
+            np.quantile(
+                losses,
+                0.999,
+            )
+        ),
+    }
+
+    es_95 = float(
+        np.mean(
+            losses[
+                losses
+                >= quantiles[
+                    0.95
+                ]
+            ]
+        )
+    )
+
+    es_99 = float(
+        np.mean(
+            losses[
+                losses
+                >= quantiles[
+                    0.99
+                ]
+            ]
+        )
+    )
+
+    portfolio_loss = {
+        "mean_loss": float(
+            np.mean(
+                losses
+            )
+        ),
+        "std_loss": float(
+            np.std(
+                losses,
+                ddof=1,
+            )
+        ),
+        "var_95": (
+            quantiles[
+                0.95
+            ]
+        ),
+        "var_99": (
+            quantiles[
+                0.99
+            ]
+        ),
+        "var_999": (
+            quantiles[
+                0.999
+            ]
+        ),
+        "es_95": es_95,
+        "es_99": es_99,
+    }
+
+    total_pairs = (
+        n_simulations
+        * n_bonds
+    )
+
+    migration_stats = {
+        "upgrade_rate": float(
+            upgrade_count
+            / total_pairs
+        ),
+        "downgrade_rate": float(
+            downgrade_count
+            / total_pairs
+        ),
+        "default_rate": float(
+            default_count
+            / total_pairs
+        ),
+    }
+
+    summary = {
+        "task": (
+            "CreditMetrics Portfolio Credit VaR"
+        ),
+        "n_bonds": int(
+            n_bonds
+        ),
+        "n_simulations": int(
+            n_simulations
+        ),
+        "correlation": float(
+            rho
+        ),
+        "recovery_rate": float(
+            recovery_rate
+        ),
+        "mean_loss": (
+            portfolio_loss[
+                "mean_loss"
+            ]
+        ),
+        "var_99": (
+            portfolio_loss[
+                "var_99"
+            ]
+        ),
+        "es_99": (
+            portfolio_loss[
+                "es_99"
+            ]
+        ),
+    }
+
+    out_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    (
+        out_dir
+        / "portfolio_loss.json"
+    ).write_text(
+        json.dumps(
+            portfolio_loss,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    pd.DataFrame(
+        loss_rows,
+        columns=[
+            "initial_rating",
+            "n_bonds",
+            "mean_loss",
+            "prob_default",
+        ],
+    ).to_csv(
+        out_dir
+        / "loss_by_rating.csv",
+        index=False,
+    )
+
+    (
+        out_dir
+        / "migration_stats.json"
+    ).write_text(
+        json.dumps(
+            migration_stats,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    (
+        out_dir
+        / "summary.json"
+    ).write_text(
+        json.dumps(
+            summary,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 @dataclass(frozen=True)
 class CreditPortfolioRiskSkill:
     name: str = "credit-portfolio-risk-domain"
@@ -813,11 +1509,27 @@ class CreditPortfolioRiskSkill:
         out_dir: Path,
         seed: int,
     ) -> None:
-        del instruction, seed
+        del seed
 
-        data_dir = _find_credit_data_dir(
-            task_dir
-        )
+        try:
+            data_dir = _find_credit_data_dir(
+                task_dir
+            )
+        except RuntimeError:
+            lowered = instruction.lower()
+
+            if (
+                "rating transition matrix" in lowered
+                and "creditmetrics" in lowered
+                and "gaussian copula" in lowered
+            ):
+                _solve_creditmetrics_from_instruction(
+                    instruction=instruction,
+                    out_dir=out_dir,
+                )
+                return
+
+            raise
 
         (
             portfolio,
