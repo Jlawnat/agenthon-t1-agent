@@ -75,7 +75,7 @@ class HouseReasoningPayloadTests(unittest.TestCase):
         )
         self.assertEqual(
             seen["payload"]["max_tokens"],
-            4000,
+            8000,
         )
         self.assertEqual(
             result.text,

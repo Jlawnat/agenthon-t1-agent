@@ -5,6 +5,7 @@ from typing import Any
 
 from agent.compiled_specification import CompiledSpecification
 from agent.planner import CandidateStrategy
+from agent.qf_primitives import PRIMITIVE_API_CATALOG
 from agent.skill_packs import SkillPack
 
 
@@ -246,6 +247,9 @@ def build_candidate_prompt(
         "precision_guidance": build_precision_guidance(
             instruction_text
         ),
+        "available_runtime_primitives": list(
+            PRIMITIVE_API_CATALOG
+        ),
     }
 
     context = json.dumps(
@@ -277,6 +281,11 @@ Generalization protocol for unfamiliar domains:
    optimization, root finding, numerical integration, portfolio accounting,
    and serialization. Reuse standard mathematical identities and the exact
    named method from the contract; write only the missing glue.
+   A curated read-only module named qf_primitives is importable in the
+   candidate runtime. Its exact supported signatures are listed in
+   available_runtime_primitives. Prefer those tested primitives when they
+   match the contract, but do not force them when the task requires a
+   different convention.
 4. Implement the solution self-contained in solver.py. Do not require the
    existence of a task-specific solver, task ID, hidden reference value, or
    checker behavior.
@@ -307,6 +316,9 @@ Requirements:
 - Fail clearly if required inputs are missing.
 - Keep runtime appropriate for the task.
 - Implement the supplied candidate strategy rather than silently switching to another approach.
+- Treat candidate_strategy.diversity_role as binding: preserve a materially
+  different computational route from the other candidate roles where the
+  task permits it; do not merely rename the same method.
 - Treat every explicit task convention as executable specification: preserve the stated operation order, date/window boundaries, percentile/interpolation convention, rebalancing sequence, sign convention, compounding rule, simulation seed/count, and requested approximation exactly.
 - For multi-output tasks, validate each required file independently; do not assume one shared schema or row count across heterogeneous outputs.
 - Prefer the exact closed-form or numerical method named by the task when one is specified. Do not substitute a superficially similar shortcut.

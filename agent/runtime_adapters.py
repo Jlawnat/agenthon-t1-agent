@@ -17,6 +17,7 @@ from agent.front_half import FrontHalfDependencies
 from agent.model_client import ModelClient, ModelResponse
 from agent.planner import build_planner_prompt
 from agent.planner_validator import parse_planner_output
+from agent.qf_primitives import PRIMITIVE_API_CATALOG
 from agent.planning import build_task_plan
 from agent.run_context import RunContext
 from agent.semantic_selection import (
@@ -229,6 +230,23 @@ def _fallback_strategy_payload(
     return base
 
 
+_DIVERSITY_ROLES = (
+    (
+        "contract-faithful primary: prefer the most direct exact, analytical, "
+        "or specification-native method and keep transformations minimal"
+    ),
+    (
+        "independent composition: solve through a materially different "
+        "decomposition or numerical route and independently reconcile the "
+        "highest-value result"
+    ),
+    (
+        "robustness alternative: emphasize defensive parsing, numerical "
+        "stability, edge cases, and an alternate formulation where practical"
+    ),
+)
+
+
 def _strategy_for_candidate(
     plan: RuntimePlan,
     candidate_id: int,
@@ -250,6 +268,17 @@ def _strategy_for_candidate(
 
     payload["candidate_id"] = candidate_id
     payload["candidate_seed"] = candidate_seed
+    payload["diversity_role"] = (
+        _DIVERSITY_ROLES[
+            (
+                candidate_id
+                - 1
+            )
+            % len(
+                _DIVERSITY_ROLES
+            )
+        ]
+    )
 
     return _StrategyEnvelope(
         payload=payload
@@ -306,6 +335,9 @@ def _build_repair_prompt(
             or {}
         ),
         "source_code": request.source_code,
+        "available_runtime_primitives": list(
+            PRIMITIVE_API_CATALOG
+        ),
     }
 
     context = json.dumps(
@@ -346,6 +378,10 @@ Repair requirements:
 - If this is repair attempt 2 or later, re-derive the failing logic from the explicit task contract and current failure evidence; do not blindly repeat the previous patch pattern.
 - Preserve correct parts of the original solution.
 - Do not hardcode expected benchmark answers.
+- A curated read-only module named qf_primitives is importable. Its exact
+  supported signatures are listed in available_runtime_primitives. Reuse a
+  matching tested primitive instead of reimplementing it, unless the task
+  explicitly requires a different convention.
 - Recheck syntax, imports, output paths, schema, dtypes, identifiers, financial invariants, and numerical edge cases before returning code.
 
 REPAIR CONTEXT:
@@ -378,6 +414,50 @@ def build_runtime_components(
     ) -> float:
         return run_context.bounded_timeout(
             model_client.timeout_seconds
+        )
+
+    def _generation_output_budget(
+        plan: RuntimePlan,
+    ) -> int:
+        difficulty = str(
+            getattr(
+                plan.task_plan,
+                "difficulty",
+                "medium",
+            )
+        ).lower()
+
+        budget = {
+            "easy": 5000,
+            "medium": 6500,
+            "hard": 8000,
+        }.get(
+            difficulty,
+            6500,
+        )
+
+        required_outputs = getattr(
+            plan.planning_specification,
+            "required_output_paths",
+            (),
+        )
+
+        try:
+            output_count = len(
+                required_outputs
+            )
+        except TypeError:
+            output_count = 0
+
+        if output_count >= 5:
+            budget = max(
+                budget,
+                7500,
+            )
+
+        return min(
+            budget,
+            model_client.max_output_tokens,
         )
 
     def snapshot_adapter(
@@ -419,6 +499,7 @@ def build_runtime_components(
                 timeout_seconds=_model_timeout(
                     run_context
                 ),
+                max_output_tokens=2500,
             )
         )
 
@@ -491,6 +572,7 @@ def build_runtime_components(
                 timeout_seconds=_model_timeout(
                     run_context
                 ),
+                max_output_tokens=3500,
             )
         )
 
@@ -592,6 +674,11 @@ def build_runtime_components(
             timeout_seconds=_model_timeout(
                 shared_run_context
             ),
+            max_output_tokens=(
+                _generation_output_budget(
+                    request.plan
+                )
+            ),
         )
 
         return GeneratedCandidate(
@@ -624,6 +711,7 @@ def build_runtime_components(
             timeout_seconds=_model_timeout(
                 shared_run_context
             ),
+            max_output_tokens=2000,
         )
 
         tokens_used = _response_tokens(
@@ -654,6 +742,7 @@ def build_runtime_components(
             timeout_seconds=_model_timeout(
                 shared_run_context
             ),
+            max_output_tokens=8000,
         )
 
         return RepairedCandidate(

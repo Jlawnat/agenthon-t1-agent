@@ -506,10 +506,43 @@ class CandidateWorkspace:
             root_dir
             / "src"
         )
+        library_dir = (
+            root_dir
+            / "lib"
+        )
 
         input_dir.mkdir()
         output_dir.mkdir()
         source_dir.mkdir()
+        library_dir.mkdir()
+
+        primitive_source = (
+            Path(__file__)
+            .with_name(
+                "qf_primitives.py"
+            )
+        )
+
+        if not primitive_source.is_file():
+            raise CandidateWorkspaceError(
+                "Curated candidate primitive library is missing."
+            )
+
+        primitive_destination = (
+            library_dir
+            / "qf_primitives.py"
+        )
+
+        shutil.copyfile(
+            primitive_source,
+            primitive_destination,
+        )
+
+        primitive_destination.chmod(
+            stat.S_IRUSR
+            | stat.S_IRGRP
+            | stat.S_IROTH
+        )
 
         environment_data = (
             task_dir

@@ -676,8 +676,16 @@ def _build_environment(
             "PYTHONUNBUFFERED": "1",
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONNOUSERSITE": "1",
-            "PYTHONPATH": str(
-                guard_dir
+            "PYTHONPATH": os.pathsep.join(
+                [
+                    str(
+                        guard_dir
+                    ),
+                    str(
+                        cwd
+                        / "lib"
+                    ),
+                ]
             ),
             # Candidate code should resolve task paths from
             # these roots rather than hardcoding global mounts.

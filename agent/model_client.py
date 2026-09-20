@@ -14,7 +14,7 @@ from typing import Any
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_REQUEST_BYTES = 8 * 1024 * 1024
 DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-DEFAULT_MAX_OUTPUT_TOKENS = 4000
+DEFAULT_MAX_OUTPUT_TOKENS = 8000
 MAX_ERROR_BODY_BYTES = 4096
 MAX_ENDPOINT_CHARS = 2048
 MAX_MODEL_NAME_CHARS = 256
@@ -109,6 +109,7 @@ class ModelClient:
         *,
         temperature: float = 0.0,
         timeout_seconds: float | None = None,
+        max_output_tokens: int | None = None,
     ) -> ModelResponse:
         if not self.endpoint:
             raise RuntimeError(
@@ -132,6 +133,18 @@ class ModelClient:
 
         temperature_value = self._temperature(
             temperature
+        )
+
+        effective_max_output_tokens = (
+            self.max_output_tokens
+            if max_output_tokens is None
+            else min(
+                self.max_output_tokens,
+                self._positive_integer(
+                    max_output_tokens,
+                    name="max_output_tokens",
+                ),
+            )
         )
 
         effective_timeout = (
@@ -159,7 +172,7 @@ class ModelClient:
                 }
             ],
             "temperature": temperature_value,
-            "max_tokens": self.max_output_tokens,
+            "max_tokens": effective_max_output_tokens,
             "chat_template_kwargs": {
                 # The approved Nemotron House model is a reasoning model.
                 # Use low-effort thinking to recover reasoning quality while

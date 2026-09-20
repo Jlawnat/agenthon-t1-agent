@@ -53,10 +53,18 @@ class TaskSnapshot:
             elif path.suffix.lower() in {
                 ".parquet",
                 ".csv",
+                ".tsv",
                 ".json",
                 ".jsonl",
                 ".txt",
                 ".md",
+                ".zip",
+                ".html",
+                ".htm",
+                ".xml",
+                ".xbrl",
+                ".xsd",
+                ".py",
             }:
                 data_files.append(rel)
             else:
