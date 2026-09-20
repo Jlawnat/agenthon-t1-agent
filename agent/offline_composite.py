@@ -31,6 +31,10 @@ from agent.finance_primitives import (
     solve_breakeven_volatility,
 )
 from agent.finance_schema import TaskDataCatalog
+from agent.finance_derivatives_mc import (
+    run_cliquet_workflow,
+    run_mc_greek_surface_workflow,
+)
 from agent.finance_processes import (
     run_funding_ou_carry_workflow,
     run_log_ou_jump_moments_workflow,
@@ -988,6 +992,12 @@ class CompositeFinanceSkill:
     ) -> None:
         del seed
         plan = plan_finance_task(instruction, task_dir)
+        if plan.executable_recipe == "cliquet-forward-start-analysis":
+            run_cliquet_workflow(task_dir, out_dir)
+            return
+        if plan.executable_recipe == "mc-greek-surface-analysis":
+            run_mc_greek_surface_workflow(out_dir)
+            return
         if plan.executable_recipe == "funding-ou-carry-analysis":
             run_funding_ou_carry_workflow(task_dir, out_dir)
             return

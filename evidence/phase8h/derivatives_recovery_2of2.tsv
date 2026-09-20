@@ -1,0 +1,3 @@
+task	solver_exit	checker_exit	reward
+t1-cliquet-ratchet-pricing	0	0	1.0
+t1-mc-greek-surface-1	0	0	1.0

@@ -217,7 +217,124 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
     ):
         caps.add("process_monte_carlo")
 
+    if _contains(
+        text,
+        "historical volatility",
+        "annualized volatility",
+    ):
+        caps.add("historical_volatility")
+
+    if _contains(
+        text,
+        "black-scholes",
+        "black scholes",
+    ):
+        caps.add("black_scholes_vanilla")
+
+    if _contains(
+        text,
+        "forward-starting",
+        "forward starting",
+        "forward-start",
+        "forward start",
+    ):
+        caps.add("forward_start_option")
+
+    if _contains(
+        text,
+        "cliquet",
+        "ratchet",
+    ):
+        caps.add("cliquet_aggregation")
+        score += 3
+
+    if (
+        _contains(
+            text,
+            "monte carlo",
+            "mc simulation",
+        )
+        and _contains(
+            text,
+            "european option",
+            "european options",
+            "asian option",
+            "asian options",
+        )
+    ):
+        caps.add("gbm_monte_carlo")
+        score += 2
+
+    if _contains(
+        text,
+        "pathwise",
+        "ipa",
+    ) and _contains(
+        text,
+        "greek",
+        "greeks",
+    ):
+        caps.add("pathwise_greeks")
+
+    if _contains(
+        text,
+        "likelihood ratio",
+        "score function",
+    ) and _contains(
+        text,
+        "greek",
+        "greeks",
+    ):
+        caps.add("likelihood_ratio_greeks")
+
+    if _contains(
+        text,
+        "delta surface",
+        "delta surfaces",
+        "vega surface",
+        "vega surfaces",
+        "delta and vega surface",
+        "delta and vega surfaces",
+        "delta/vega surface",
+        "delta/vega surfaces",
+        "greek surface",
+        "greek surfaces",
+        "greeks surface",
+        "greeks surfaces",
+    ):
+        caps.add("greek_surface")
+
+    if _contains(
+        text,
+        "convergence study",
+        "convergence behavior",
+        "convergence behaviour",
+    ):
+        caps.add("mc_convergence")
+
     recipe = None
+
+    cliquet_required = {
+        "historical_volatility",
+        "black_scholes_vanilla",
+        "forward_start_option",
+        "cliquet_aggregation",
+    }
+    cliquet_schema = catalog.has_csv({"date", "close"})
+    if cliquet_required.issubset(caps) and cliquet_schema:
+        recipe = "cliquet-forward-start-analysis"
+        score += 5
+
+    mc_greek_required = {
+        "gbm_monte_carlo",
+        "pathwise_greeks",
+        "likelihood_ratio_greeks",
+        "greek_surface",
+        "mc_convergence",
+    }
+    if mc_greek_required.issubset(caps):
+        recipe = "mc-greek-surface-analysis"
+        score += 5
 
     funding_required = {
         "ou_calibration",
