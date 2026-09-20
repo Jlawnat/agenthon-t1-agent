@@ -42,6 +42,10 @@ from agent.offline_risk import (
     MarketRiskSkill,
 )
 
+from agent.offline_distribution_risk import (
+    DistributionRiskSkill,
+)
+
 from agent.offline_fixed_income import (
     FixedIncomeCurveSkill,
 )
@@ -605,6 +609,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     BinanceParticipationTcaSkill(),
     AlphaHedgeStrategySkill(),
     PortfolioStrategySkill(),
+    DistributionRiskSkill(),
     MarketRiskSkill(),
     FixedIncomeCurveSkill(),
     TwoAssetDerivativesSkill(),
