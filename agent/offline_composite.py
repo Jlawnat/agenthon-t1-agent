@@ -31,6 +31,10 @@ from agent.finance_primitives import (
     solve_breakeven_volatility,
 )
 from agent.finance_schema import TaskDataCatalog
+from agent.finance_processes import (
+    run_funding_ou_carry_workflow,
+    run_log_ou_jump_moments_workflow,
+)
 from agent.finance_xccy import run_xccy_workflow
 
 
@@ -984,6 +988,12 @@ class CompositeFinanceSkill:
     ) -> None:
         del seed
         plan = plan_finance_task(instruction, task_dir)
+        if plan.executable_recipe == "funding-ou-carry-analysis":
+            run_funding_ou_carry_workflow(task_dir, out_dir)
+            return
+        if plan.executable_recipe == "log-ou-jump-analysis":
+            run_log_ou_jump_moments_workflow(task_dir, out_dir)
+            return
         if plan.executable_recipe == "xccy-desk-analysis":
             run_xccy_workflow(task_dir, out_dir, instruction)
             return

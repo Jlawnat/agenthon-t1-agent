@@ -19,7 +19,22 @@ class CompositionPlan:
 
 
 def _contains(text: str, *terms: str) -> bool:
-    return any(term in text for term in terms)
+    """Match semantic terms without accidental substring collisions.
+
+    Examples:
+    - "ois" matches "OIS curve"
+    - "ois" does NOT match "Poisson"
+    - multi-word and hyphenated phrases remain supported
+    """
+    for term in terms:
+        pattern = (
+            r"(?<![a-z0-9])"
+            + re.escape(term.lower())
+            + r"(?![a-z0-9])"
+        )
+        if re.search(pattern, text):
+            return True
+    return False
 
 
 def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
@@ -46,7 +61,15 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
         score += 3
     if _contains(text, "psor", "projected successive over-relaxation"):
         caps.add("psor_projection")
-    if _contains(text, "cash dividend", "discrete dividend"):
+    if _contains(
+        text,
+        "cash dividend",
+        "cash dividends",
+        "discrete dividend",
+        "discrete dividends",
+        "discrete cash dividend",
+        "discrete cash dividends",
+    ):
         caps.add("cash_dividend_jump")
     if _contains(text, "early exercise boundary", "exercise boundary"):
         caps.add("exercise_boundary")
@@ -60,7 +83,13 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
         score += 3
     if _contains(text, "ois", "discount curve"):
         caps.add("curve_bootstrap")
-    if _contains(text, "fx forward", "forward points"):
+    if _contains(
+        text,
+        "fx forward",
+        "fx forwards",
+        "forward point",
+        "forward points",
+    ):
         caps.add("fx_forward_curve")
     if _contains(text, "libor", "projection curve", "fra"):
         caps.add("projection_curve")
@@ -89,12 +118,29 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
 
     if _contains(text, "ema"):
         caps.add("sma_seeded_ema")
-    if _contains(text, "ewma") and _contains(text, "vol", "variance"):
+    if _contains(text, "ewma") and _contains(
+        text,
+        "vol",
+        "volatility",
+        "variance",
+    ):
         caps.add("ewma_volatility")
-    if _contains(text, "volatility target", "vol target", "vol-target"):
+    if _contains(
+        text,
+        "volatility target",
+        "volatility targeting",
+        "vol target",
+        "vol targeting",
+        "vol-target",
+        "vol-targeting",
+    ):
         caps.add("vol_target_weights")
         score += 2
-    if _contains(text, "regime"):
+    if _contains(
+        text,
+        "regime",
+        "regimes",
+    ):
         caps.add("percentile_regime")
     if _contains(text, "sharpe", "calmar", "drawdown"):
         caps.add("performance_metrics")
@@ -107,7 +153,123 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
     if _contains(text, "var", "value-at-risk", "value at risk"):
         caps.add("var_es")
 
+    if _contains(
+        text,
+        "ornstein-uhlenbeck",
+        "ornstein uhlenbeck",
+        "ou process",
+        "ou model",
+        "ou in log-space",
+        "ou in log space",
+    ):
+        caps.add("ou_calibration")
+        score += 2
+    if _contains(
+        text,
+        "adf",
+        "augmented dickey",
+    ):
+        caps.add("stationarity_test")
+    if _contains(
+        text,
+        "exact ou transition",
+        "exact ou transition distribution",
+    ):
+        caps.add("exact_ou_simulation")
+    if (
+        _contains(
+            text,
+            "funding rate",
+            "funding rates",
+        )
+        and _contains(
+            text,
+            "basis carry",
+            "carry trade",
+        )
+    ):
+        caps.add("basis_carry_risk")
+        score += 2
+
+    if _contains(
+        text,
+        "mean-reverting jump-diffusion",
+        "mean reverting jump diffusion",
+    ):
+        caps.add("ou_exact_calibration")
+        score += 2
+    if _contains(
+        text,
+        "poisson",
+        "jump-diffusion",
+        "jump diffusion",
+    ):
+        caps.add("compound_poisson_jumps")
+    if _contains(
+        text,
+        "conditional moments",
+    ):
+        caps.add("conditional_process_moments")
+    if _contains(
+        text,
+        "monte carlo",
+        "mc simulation",
+    ):
+        caps.add("process_monte_carlo")
+
     recipe = None
+
+    funding_required = {
+        "ou_calibration",
+        "stationarity_test",
+        "exact_ou_simulation",
+        "basis_carry_risk",
+        "process_monte_carlo",
+    }
+    funding_schema = (
+        catalog.has_csv({
+            "symbol",
+            "funding_time",
+            "funding_rate",
+        })
+        and catalog.has_json({
+            "target_symbol",
+            "analysis_start",
+            "analysis_end",
+            "regime_split_date",
+            "annualization_periods",
+            "ou_dt",
+            "mc_num_paths",
+            "mc_horizon_periods",
+            "mc_random_seed",
+            "var_confidence",
+        })
+    )
+    if (
+        funding_required.issubset(caps)
+        and funding_schema
+    ):
+        recipe = (
+            "funding-ou-carry-analysis"
+        )
+        score += 5
+
+    log_jump_required = {
+        "ou_calibration",
+        "ou_exact_calibration",
+        "compound_poisson_jumps",
+        "conditional_process_moments",
+        "process_monte_carlo",
+    }
+    log_jump_schema = (
+        catalog.has_csv({"dgs10"})
+    )
+    if (
+        log_jump_required.issubset(caps)
+        and log_jump_schema
+    ):
+        recipe = "log-ou-jump-analysis"
+        score += 5
 
     xccy_required = {
         "xccy_cashflow_engine",
