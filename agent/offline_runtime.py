@@ -34,6 +34,10 @@ from agent.offline_portfolio import (
     PortfolioStrategySkill,
 )
 
+from agent.offline_risk import (
+    MarketRiskSkill,
+)
+
 class OfflineSkill(Protocol):
     name: str
 
@@ -576,6 +580,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     BinanceParticipationTcaSkill(),
     AlphaHedgeStrategySkill(),
     PortfolioStrategySkill(),
+    MarketRiskSkill(),
 )
 
 
