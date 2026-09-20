@@ -708,16 +708,85 @@ class BlackScholesGreeksSkill:
 def _expected_output_files(instruction: str) -> set[str]:
     import re
 
-    patterns = (
-        r"/app/output/([A-Za-z0-9_.-]+\.(?:json|csv))",
-        r"/output/([A-Za-z0-9_.-]+\.(?:json|csv))",
-    )
+    extensions = r"(?:json|csv|parquet|txt|md)"
     expected: set[str] = set()
-    for pattern in patterns:
-        expected.update(re.findall(pattern, instruction, flags=re.IGNORECASE))
+
+    # Explicit output paths anywhere in the instruction.
+    explicit_patterns = (
+        rf"/app/output/([A-Za-z0-9_.-]+\.{extensions})",
+        rf"/output/([A-Za-z0-9_.-]+\.{extensions})",
+    )
+    for pattern in explicit_patterns:
+        expected.update(
+            match.lower()
+            for match in re.findall(
+                pattern,
+                instruction,
+                flags=re.IGNORECASE,
+            )
+        )
+
+    # Markdown sections that describe required outputs/deliverables.
+    lines = instruction.splitlines()
+    headings: list[tuple[int, int, str]] = []
+
+    for index, line in enumerate(lines):
+        match = re.match(r"^\s*(#{1,6})\s+(.+?)\s*$", line)
+        if match:
+            headings.append(
+                (
+                    index,
+                    len(match.group(1)),
+                    re.sub(r"[`*_]", "", match.group(2)).strip().lower(),
+                )
+            )
+
+    output_heading_terms = (
+        "output",
+        "outputs",
+        "deliverable",
+        "deliverables",
+        "files to produce",
+        "required files",
+        "submission files",
+    )
+
+    filename_pattern = re.compile(
+        rf"(?<![A-Za-z0-9_.-])"
+        rf"([A-Za-z0-9][A-Za-z0-9_.-]*\.{extensions})"
+        rf"(?![A-Za-z0-9_.-])",
+        flags=re.IGNORECASE,
+    )
+
+    for position, (start_line, level, title) in enumerate(headings):
+        if not any(term in title for term in output_heading_terms):
+            continue
+
+        end_line = len(lines)
+        for next_start, next_level, _ in headings[position + 1:]:
+            if next_level <= level:
+                end_line = next_start
+                break
+
+        block = "\n".join(lines[start_line + 1:end_line])
+        expected.update(
+            match.lower()
+            for match in filename_pattern.findall(block)
+        )
+
+    # Imperative one-line contracts outside a dedicated Output section.
+    imperative_pattern = re.compile(
+        rf"(?:save|write|create|produce|emit|export)"
+        rf"[^\n]{{0,160}}?"
+        rf"([A-Za-z0-9][A-Za-z0-9_.-]*\.{extensions})",
+        flags=re.IGNORECASE,
+    )
+    expected.update(
+        match.lower()
+        for match in imperative_pattern.findall(instruction)
+    )
+
     return expected
-
-
 def _candidate_output_complete(candidate_dir: Path, instruction: str) -> bool:
     expected = _expected_output_files(instruction)
     if not expected:

@@ -94,3 +94,50 @@ def test_output_contract_extraction() -> None:
     Save /app/output/results.json and `/output/summary.csv`.
     """
     assert _expected_output_files(instruction) == {"results.json", "summary.csv"}
+
+
+def test_output_contract_extraction_from_markdown_output_section() -> None:
+    instruction = """
+    ## Input
+    Read `prices.csv` and `params.json`.
+
+    ## Output Files
+    Write all results to `/app/output`.
+
+    - **`digital_prices.csv`**
+    - `gap_prices.csv`
+    - **`barrier_digital_prices.csv`**
+    - `summary.json`
+
+    ## Notes
+    Use float64 precision.
+    """
+    assert _expected_output_files(instruction) == {
+        "digital_prices.csv",
+        "gap_prices.csv",
+        "barrier_digital_prices.csv",
+        "summary.json",
+    }
+
+
+def test_output_contract_does_not_confuse_inputs_with_outputs() -> None:
+    instruction = """
+    # Task
+    Read `dj30_constituents_daily.csv`.
+
+    ## Output
+    - `data_summary.json`
+    - `copula_fits.csv`
+    - `best_copulas.json`
+    - `tail_dependence.csv`
+    - `summary.json`
+    """
+    expected = _expected_output_files(instruction)
+    assert "dj30_constituents_daily.csv" not in expected
+    assert expected == {
+        "data_summary.json",
+        "copula_fits.csv",
+        "best_copulas.json",
+        "tail_dependence.csv",
+        "summary.json",
+    }
