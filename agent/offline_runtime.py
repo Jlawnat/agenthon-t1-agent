@@ -13,6 +13,10 @@ from agent.offline_bollinger import (
     BollingerBacktestSkill,
 )
 
+from agent.offline_brinson import (
+    BrinsonSectorAttributionSkill,
+)
+
 
 class OfflineSkill(Protocol):
     name: str
@@ -551,6 +555,7 @@ class BlackScholesGreeksSkill:
 _SKILLS: tuple[OfflineSkill, ...] = (
     BlackScholesGreeksSkill(),
     BollingerBacktestSkill(),
+    BrinsonSectorAttributionSkill(),
 )
 
 
