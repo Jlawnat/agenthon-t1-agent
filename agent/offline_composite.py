@@ -744,6 +744,228 @@ def _solve_factor_regression_analysis(
     fig.savefig(out_dir / "rolling_betas.png", dpi=100)
     plt.close(fig)
 
+
+def _parse_coarse_fd_grid(instruction: str, fine_stock: int, fine_time: int) -> tuple[int, int]:
+    import re
+
+    match_s = re.search(
+        r"coarser grid[^\\n]*?N_?S\\s*=\\s*([0-9]+)",
+        instruction,
+        re.I,
+    )
+    match_t = re.search(
+        r"coarser grid.*?N_?T\\s*=\\s*([0-9]+)",
+        instruction,
+        re.I | re.S,
+    )
+    coarse_stock = int(match_s.group(1)) if match_s else max(fine_stock // 2, 3)
+    coarse_time = int(match_t.group(1)) if match_t else max(fine_time // 2, 2)
+    return coarse_stock, coarse_time
+
+
+def _solve_finite_difference_option_analysis(
+    instruction: str,
+    out_dir: Path,
+) -> None:
+    import csv
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from agent.finance_fd import (
+        crank_nicolson_option,
+        parse_fd_option_spec,
+        richardson_second_order,
+        with_grid_size,
+    )
+
+    spec = parse_fd_option_spec(instruction)
+
+    am_put = crank_nicolson_option(
+        spec,
+        option_type="put",
+        exercise_type="american",
+        return_grid=True,
+        return_boundary=True,
+    )
+    am_call = crank_nicolson_option(
+        spec,
+        option_type="call",
+        exercise_type="american",
+    )
+    eu_put = crank_nicolson_option(
+        spec,
+        option_type="put",
+        exercise_type="european",
+    )
+    eu_call = crank_nicolson_option(
+        spec,
+        option_type="call",
+        exercise_type="european",
+    )
+
+    am_put_no_div = crank_nicolson_option(
+        spec,
+        option_type="put",
+        exercise_type="american",
+        dividends=(),
+    )
+    am_call_no_div = crank_nicolson_option(
+        spec,
+        option_type="call",
+        exercise_type="american",
+        dividends=(),
+    )
+    eu_put_no_div = crank_nicolson_option(
+        spec,
+        option_type="put",
+        exercise_type="european",
+        dividends=(),
+    )
+    eu_call_no_div = crank_nicolson_option(
+        spec,
+        option_type="call",
+        exercise_type="european",
+        dividends=(),
+    )
+
+    coarse_stock, coarse_time = _parse_coarse_fd_grid(
+        instruction,
+        spec.stock_steps,
+        spec.time_steps,
+    )
+    coarse_spec = with_grid_size(
+        spec,
+        stock_steps=coarse_stock,
+        time_steps=coarse_time,
+    )
+    coarse_put = crank_nicolson_option(
+        coarse_spec,
+        option_type="put",
+        exercise_type="american",
+    )
+
+    rich = richardson_second_order(am_put.value, coarse_put.value)
+    err_fine = abs(am_put.value - rich)
+    err_coarse = abs(coarse_put.value - rich)
+    convergence_ratio = err_coarse / err_fine if err_fine > 1e-10 else float("inf")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    option_values = {
+        "american_put": am_put.value,
+        "american_call": am_call.value,
+        "european_put": eu_put.value,
+        "european_call": eu_call.value,
+        "american_put_no_div": am_put_no_div.value,
+        "american_call_no_div": am_call_no_div.value,
+        "european_put_no_div": eu_put_no_div.value,
+        "european_call_no_div": eu_call_no_div.value,
+    }
+    (out_dir / "option_values.json").write_text(
+        json.dumps(option_values, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    if am_put.value_grid is None or am_put.exercise_boundary is None:
+        raise RuntimeError("American put diagnostic grid was not produced.")
+
+    stock_sample_idx = list(range(0, spec.stock_steps + 1, 5))
+    if spec.stock_steps not in stock_sample_idx:
+        stock_sample_idx.append(spec.stock_steps)
+    time_sample_idx = list(range(0, spec.time_steps + 1, 10))
+    if spec.time_steps not in time_sample_idx:
+        time_sample_idx.append(spec.time_steps)
+
+    with (out_dir / "american_put_grid.csv").open(
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            ["S"] + [f"{am_put.time_grid[i]:.4f}" for i in time_sample_idx]
+        )
+        for stock_index in stock_sample_idx:
+            writer.writerow(
+                [f"{am_put.stock_grid[stock_index]:.2f}"]
+                + [
+                    f"{am_put.value_grid[stock_index, time_index]:.6f}"
+                    for time_index in time_sample_idx
+                ]
+            )
+
+    with (out_dir / "early_exercise_boundary.csv").open(
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as f:
+        writer = csv.writer(f)
+        writer.writerow(["t", "S_star"])
+        for time, boundary in zip(
+            am_put.time_grid,
+            am_put.exercise_boundary,
+            strict=True,
+        ):
+            writer.writerow([f"{time:.6f}", f"{boundary:.6f}"])
+
+    with (out_dir / "greeks.csv").open(
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as f:
+        writer = csv.writer(f)
+        writer.writerow(["option_type", "delta"])
+        writer.writerow(["american_put", f"{am_put.delta:.6f}"])
+        writer.writerow(["american_call", f"{am_call.delta:.6f}"])
+        writer.writerow(["european_put", f"{eu_put.delta:.6f}"])
+        writer.writerow(["european_call", f"{eu_call.delta:.6f}"])
+
+    with (out_dir / "convergence.csv").open(
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as f:
+        writer = csv.writer(f)
+        writer.writerow(["grid", "price"])
+        writer.writerow(["fine", f"{am_put.value:.6f}"])
+        writer.writerow(["coarse", f"{coarse_put.value:.6f}"])
+        writer.writerow(["richardson", f"{rich:.6f}"])
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    mask = am_put.exercise_boundary > 0.0
+    ax.plot(
+        am_put.time_grid[mask],
+        am_put.exercise_boundary[mask],
+        linewidth=1.5,
+    )
+    ax.axhline(y=spec.strike, linestyle="--", alpha=0.5, label=f"K={spec.strike:g}")
+    ax.set_xlabel("Time t")
+    ax.set_ylabel("Critical Stock Price S*(t)")
+    ax.set_title("Early Exercise Boundary (American Put)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_dir / "exercise_boundary.png", dpi=150)
+    plt.close(fig)
+
+    no_div_call_diff = abs(am_call_no_div.value - eu_call_no_div.value)
+    summary = {
+        "american_geq_european_put": bool(am_put.value >= eu_put.value),
+        "american_geq_european_call": bool(am_call.value >= eu_call.value),
+        "no_div_call_diff": float(no_div_call_diff),
+        "early_exercise_premium_put": float(am_put.value - eu_put.value),
+        "early_exercise_premium_call": float(am_call.value - eu_call.value),
+        "exercise_boundary_at_T": float(am_put.exercise_boundary[-1]),
+        "exercise_boundary_at_0": float(am_put.exercise_boundary[0]),
+        "richardson_estimate": float(rich),
+        "convergence_ratio": float(convergence_ratio),
+    }
+    (out_dir / "summary.json").write_text(
+        json.dumps(summary, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
 @dataclass(frozen=True)
 class CompositeFinanceSkill:
     name: str = "finance-composition-domain"
@@ -761,6 +983,9 @@ class CompositeFinanceSkill:
     ) -> None:
         del seed
         plan = plan_finance_task(instruction, task_dir)
+        if plan.executable_recipe == "finite-difference-option-analysis":
+            _solve_finite_difference_option_analysis(instruction, out_dir)
+            return
         if plan.executable_recipe == "factor-regression-analysis":
             _solve_factor_regression_analysis(instruction, task_dir, out_dir)
             return

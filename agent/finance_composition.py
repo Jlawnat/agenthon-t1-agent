@@ -48,6 +48,12 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
         caps.add("psor_projection")
     if _contains(text, "cash dividend", "discrete dividend"):
         caps.add("cash_dividend_jump")
+    if _contains(text, "early exercise boundary", "exercise boundary"):
+        caps.add("exercise_boundary")
+    if _contains(text, "delta", "greeks"):
+        caps.add("finite_difference_delta")
+    if _contains(text, "richardson"):
+        caps.add("richardson_extrapolation")
 
     if _contains(text, "cross-currency", "cross currency", "xccy"):
         caps.add("xccy_cashflow_engine")
@@ -92,6 +98,18 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
         caps.add("var_es")
 
     recipe = None
+
+    fd_required = {
+        "crank_nicolson_pde",
+        "psor_projection",
+        "cash_dividend_jump",
+        "exercise_boundary",
+        "finite_difference_delta",
+        "richardson_extrapolation",
+    }
+    if fd_required.issubset(caps):
+        recipe = "finite-difference-option-analysis"
+        score += 4
 
     factor_required = {
         "factor_ols",
