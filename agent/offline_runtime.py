@@ -54,6 +54,10 @@ from agent.offline_dual_curve import (
     DualCurveBootstrapSkill,
 )
 
+from agent.offline_curve_immunization import (
+    CurveImmunizationSkill,
+)
+
 from agent.offline_fixed_income import (
     FixedIncomeCurveSkill,
 )
@@ -633,6 +637,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     CreditPortfolioRiskSkill(),
     MarketRiskSkill(),
     DualCurveBootstrapSkill(),
+    CurveImmunizationSkill(),
     FixedIncomeCurveSkill(),
     AsianOptionSkill(),
     TwoAssetDerivativesSkill(),
