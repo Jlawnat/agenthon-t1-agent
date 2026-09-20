@@ -38,6 +38,30 @@ from agent.offline_portfolio import (
     PortfolioStrategySkill,
 )
 
+from agent.offline_credit_migration import (
+    CreditMigrationMatrixSkill,
+)
+
+from agent.offline_yield_curve_dynamics import (
+    YieldCurvePcaDynamicsSkill,
+)
+
+from agent.offline_fx_forward import (
+    FxForwardCrossRateSkill,
+)
+
+from agent.offline_smith_tail import (
+    TailIndexEstimationSkill,
+)
+
+from agent.offline_earnings_surprise import (
+    EarningsSurpriseSkill,
+)
+
+from agent.offline_implied_vol_approximations import (
+    ImpliedVolApproximationSkill,
+)
+
 from agent.offline_credit_portfolio import (
     CreditPortfolioRiskSkill,
 )
@@ -667,6 +691,12 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     PortfolioStrategySkill(),
     EvtPotRiskSkill(),
     DistributionRiskSkill(),
+    CreditMigrationMatrixSkill(),
+    YieldCurvePcaDynamicsSkill(),
+    FxForwardCrossRateSkill(),
+    TailIndexEstimationSkill(),
+    EarningsSurpriseSkill(),
+    ImpliedVolApproximationSkill(),
     CreditPortfolioRiskSkill(),
     MarketRiskSkill(),
     DualCurveBootstrapSkill(),
