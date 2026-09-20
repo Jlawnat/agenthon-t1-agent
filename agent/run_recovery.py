@@ -88,247 +88,304 @@ def _remove_path(
     path.unlink()
 
 
+def _current_publish_artifact_paths(
+    *,
+    final_output_dir: Path,
+    run_id: str,
+) -> tuple[Path, Path]:
+    final_output_dir = final_output_dir.resolve()
+    token = _run_token(run_id)
+
+    return (
+        final_output_dir / f".publish-staging.{token}",
+        final_output_dir / f".publish-backup.{token}",
+    )
+
+
+def _legacy_publish_artifact_paths(
+    *,
+    final_output_dir: Path,
+    run_id: str,
+) -> tuple[Path, Path]:
+    final_output_dir = final_output_dir.resolve()
+    token = _run_token(run_id)
+    parent = final_output_dir.parent
+
+    return (
+        parent / f".{final_output_dir.name}.staging.{token}",
+        parent / f".{final_output_dir.name}.backup.{token}",
+    )
+
+
+def publish_recovery_needed(
+    *,
+    final_output_dir: Path,
+    run_id: str,
+) -> bool:
+    current = _current_publish_artifact_paths(
+        final_output_dir=final_output_dir,
+        run_id=run_id,
+    )
+    legacy = _legacy_publish_artifact_paths(
+        final_output_dir=final_output_dir,
+        run_id=run_id,
+    )
+
+    return any(
+        path.exists()
+        for path in (
+            *current,
+            *legacy,
+        )
+    )
+
+
+def _inventory_excluding(
+    root: Path,
+    *,
+    excluded_top_level: set[str],
+) -> tuple[str, ...]:
+    if not root.exists() or not root.is_dir():
+        return ()
+
+    files: list[str] = []
+
+    for path in root.rglob("*"):
+        relative = path.relative_to(root)
+
+        if (
+            relative.parts
+            and relative.parts[0] in excluded_top_level
+        ):
+            continue
+
+        if path.is_file():
+            files.append(relative.as_posix())
+
+    return tuple(sorted(files))
+
+
+def _clear_directory_contents(
+    root: Path,
+    *,
+    keep_names: set[str] | None = None,
+) -> None:
+    if not root.exists():
+        return
+
+    keep = set() if keep_names is None else set(keep_names)
+
+    for child in list(root.iterdir()):
+        if child.name in keep:
+            continue
+        _remove_path(child)
+
+
+def _restore_internal_backup(
+    *,
+    final_output_dir: Path,
+    backup_dir: Path,
+) -> None:
+    final_output_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    _clear_directory_contents(
+        final_output_dir,
+        keep_names={backup_dir.name},
+    )
+
+    for child in list(backup_dir.iterdir()):
+        destination = final_output_dir / child.name
+
+        if destination.exists():
+            _remove_path(destination)
+
+        os.replace(child, destination)
+
+    backup_dir.rmdir()
+
+
 def recover_publish_state(
     *,
     final_output_dir: Path,
     run_id: str,
     expected_files: tuple[str, ...] = (),
 ) -> PublishRecoveryResult:
-    """
-    Recover an interrupted Phase 4.9 publication.
+    """Recover interrupted current or legacy publication state."""
 
-    Safety policy:
+    final_output_dir = final_output_dir.resolve()
+    expected = tuple(sorted(expected_files))
 
-    - an existing backup is treated as the previous
-      trusted output;
-    - incomplete staging is disposable;
-    - a committed final directory is trusted only when
-      its inventory matches the recorded expected files;
-    - ambiguous states roll back to the previous backup.
-    """
-
-    final_output_dir = (
-        final_output_dir.resolve()
+    (
+        current_staging,
+        current_backup,
+    ) = _current_publish_artifact_paths(
+        final_output_dir=final_output_dir,
+        run_id=run_id,
     )
 
-    parent = (
-        final_output_dir.parent
+    (
+        legacy_staging,
+        legacy_backup,
+    ) = _legacy_publish_artifact_paths(
+        final_output_dir=final_output_dir,
+        run_id=run_id,
     )
 
-    token = _run_token(
-        run_id
-    )
+    # Current publisher: transient state lives inside the writable output
+    # mount, so never replace/remove the output mount itself during rollback.
+    if current_staging.exists() or current_backup.exists():
+        removed_staging = False
 
-    staging_dir = (
-        parent
-        / (
-            f".{final_output_dir.name}"
-            f".staging.{token}"
-        )
-    )
-
-    backup_dir = (
-        parent
-        / (
-            f".{final_output_dir.name}"
-            f".backup.{token}"
-        )
-    )
-
-    expected = tuple(
-        sorted(
-            expected_files
-        )
-    )
-
-    removed_staging = False
-    removed_backup = False
-    restored_backup = False
-
-    final_exists = (
-        final_output_dir.exists()
-    )
-
-    staging_exists = (
-        staging_dir.exists()
-    )
-
-    backup_exists = (
-        backup_dir.exists()
-    )
-
-    if (
-        backup_exists
-        and not final_exists
-    ):
-        if staging_exists:
-            _remove_path(
-                staging_dir
+        if current_backup.exists():
+            current_inventory = _inventory_excluding(
+                final_output_dir,
+                excluded_top_level={
+                    current_staging.name,
+                    current_backup.name,
+                },
             )
 
-            removed_staging = True
+            if expected and current_inventory == expected:
+                if current_staging.exists():
+                    _remove_path(current_staging)
+                    removed_staging = True
 
-        os.replace(
-            backup_dir,
-            final_output_dir,
-        )
+                _remove_path(current_backup)
 
-        restored_backup = True
+                return PublishRecoveryResult(
+                    action="kept_verified_committed_output",
+                    final_output_dir=final_output_dir,
+                    staging_dir=current_staging,
+                    backup_dir=current_backup,
+                    restored_backup=False,
+                    removed_staging=removed_staging,
+                    removed_backup=True,
+                    final_output_exists=True,
+                )
+
+            if current_staging.exists():
+                _remove_path(current_staging)
+                removed_staging = True
+
+            _restore_internal_backup(
+                final_output_dir=final_output_dir,
+                backup_dir=current_backup,
+            )
+
+            return PublishRecoveryResult(
+                action="rolled_back_to_previous_output",
+                final_output_dir=final_output_dir,
+                staging_dir=current_staging,
+                backup_dir=current_backup,
+                restored_backup=True,
+                removed_staging=removed_staging,
+                removed_backup=False,
+                final_output_exists=final_output_dir.exists(),
+            )
+
+        # Staging without backup means the prior committed output was never
+        # moved aside. Discard only uncommitted staging.
+        _remove_path(current_staging)
 
         return PublishRecoveryResult(
-            action=(
-                "restored_previous_output"
-            ),
-            final_output_dir=(
-                final_output_dir
-            ),
-            staging_dir=(
-                staging_dir
-            ),
-            backup_dir=(
-                backup_dir
-            ),
+            action="discarded_uncommitted_staging",
+            final_output_dir=final_output_dir,
+            staging_dir=current_staging,
+            backup_dir=current_backup,
+            restored_backup=False,
+            removed_staging=True,
+            removed_backup=False,
+            final_output_exists=final_output_dir.exists(),
+        )
+
+    # Legacy sibling publication scheme from older releases.
+    staging_dir = legacy_staging
+    backup_dir = legacy_backup
+    removed_staging = False
+    removed_backup = False
+
+    final_exists = final_output_dir.exists()
+    staging_exists = staging_dir.exists()
+    backup_exists = backup_dir.exists()
+
+    if backup_exists and not final_exists:
+        if staging_exists:
+            _remove_path(staging_dir)
+            removed_staging = True
+
+        os.replace(backup_dir, final_output_dir)
+
+        return PublishRecoveryResult(
+            action="restored_previous_output",
+            final_output_dir=final_output_dir,
+            staging_dir=staging_dir,
+            backup_dir=backup_dir,
             restored_backup=True,
-            removed_staging=(
-                removed_staging
-            ),
+            removed_staging=removed_staging,
             removed_backup=False,
             final_output_exists=True,
         )
 
-    if (
-        backup_exists
-        and final_exists
-    ):
-        current_inventory = (
-            _inventory(
-                final_output_dir
-            )
-        )
+    if backup_exists and final_exists:
+        current_inventory = _inventory(final_output_dir)
 
-        if (
-            expected
-            and current_inventory
-            == expected
-        ):
-            _remove_path(
-                backup_dir
-            )
-
+        if expected and current_inventory == expected:
+            _remove_path(backup_dir)
             removed_backup = True
 
             if staging_exists:
-                _remove_path(
-                    staging_dir
-                )
-
+                _remove_path(staging_dir)
                 removed_staging = True
 
             return PublishRecoveryResult(
-                action=(
-                    "kept_verified_committed_output"
-                ),
-                final_output_dir=(
-                    final_output_dir
-                ),
-                staging_dir=(
-                    staging_dir
-                ),
-                backup_dir=(
-                    backup_dir
-                ),
+                action="kept_verified_committed_output",
+                final_output_dir=final_output_dir,
+                staging_dir=staging_dir,
+                backup_dir=backup_dir,
                 restored_backup=False,
-                removed_staging=(
-                    removed_staging
-                ),
+                removed_staging=removed_staging,
                 removed_backup=True,
                 final_output_exists=True,
             )
 
-        _remove_path(
-            final_output_dir
-        )
-
-        os.replace(
-            backup_dir,
-            final_output_dir,
-        )
-
-        restored_backup = True
+        _remove_path(final_output_dir)
+        os.replace(backup_dir, final_output_dir)
 
         if staging_exists:
-            _remove_path(
-                staging_dir
-            )
-
+            _remove_path(staging_dir)
             removed_staging = True
 
         return PublishRecoveryResult(
-            action=(
-                "rolled_back_to_previous_output"
-            ),
-            final_output_dir=(
-                final_output_dir
-            ),
-            staging_dir=(
-                staging_dir
-            ),
-            backup_dir=(
-                backup_dir
-            ),
+            action="rolled_back_to_previous_output",
+            final_output_dir=final_output_dir,
+            staging_dir=staging_dir,
+            backup_dir=backup_dir,
             restored_backup=True,
-            removed_staging=(
-                removed_staging
-            ),
+            removed_staging=removed_staging,
             removed_backup=False,
             final_output_exists=True,
         )
 
-    if (
-        not backup_exists
-        and staging_exists
-    ):
-        _remove_path(
-            staging_dir
-        )
-
+    if not backup_exists and staging_exists:
+        _remove_path(staging_dir)
         removed_staging = True
 
-    if (
-        final_output_dir.exists()
-        and expected
-    ):
-        current_inventory = (
-            _inventory(
-                final_output_dir
-            )
-        )
+    if final_output_dir.exists() and expected:
+        current_inventory = _inventory(final_output_dir)
 
-        if (
-            current_inventory
-            != expected
-        ):
-            _remove_path(
-                final_output_dir
-            )
+        if current_inventory != expected:
+            _remove_path(final_output_dir)
 
             return PublishRecoveryResult(
-                action=(
-                    "removed_unverified_output"
-                ),
-                final_output_dir=(
-                    final_output_dir
-                ),
-                staging_dir=(
-                    staging_dir
-                ),
-                backup_dir=(
-                    backup_dir
-                ),
+                action="removed_unverified_output",
+                final_output_dir=final_output_dir,
+                staging_dir=staging_dir,
+                backup_dir=backup_dir,
                 restored_backup=False,
-                removed_staging=(
-                    removed_staging
-                ),
+                removed_staging=removed_staging,
                 removed_backup=False,
                 final_output_exists=False,
             )
@@ -341,23 +398,13 @@ def recover_publish_state(
 
     return PublishRecoveryResult(
         action=action,
-        final_output_dir=(
-            final_output_dir
-        ),
-        staging_dir=(
-            staging_dir
-        ),
-        backup_dir=(
-            backup_dir
-        ),
+        final_output_dir=final_output_dir,
+        staging_dir=staging_dir,
+        backup_dir=backup_dir,
         restored_backup=False,
-        removed_staging=(
-            removed_staging
-        ),
-        removed_backup=False,
-        final_output_exists=(
-            final_output_dir.exists()
-        ),
+        removed_staging=removed_staging,
+        removed_backup=removed_backup,
+        final_output_exists=final_output_dir.exists(),
     )
 
 

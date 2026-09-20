@@ -43,6 +43,7 @@ from agent.repair_pipeline import (
 from agent.run_recovery import (
     PublishRecoveryResult,
     RunJournal,
+    publish_recovery_needed,
     recover_publish_state,
 )
 from agent.selection_pipeline import (
@@ -127,24 +128,14 @@ def _publish_artifact_paths(
         run_id
     )
 
-    parent = (
-        final_output_dir.parent
-    )
-
     staging = (
-        parent
-        / (
-            f".{final_output_dir.name}"
-            f".staging.{token}"
-        )
+        final_output_dir
+        / f".publish-staging.{token}"
     )
 
     backup = (
-        parent
-        / (
-            f".{final_output_dir.name}"
-            f".backup.{token}"
-        )
+        final_output_dir
+        / f".publish-backup.{token}"
     )
 
     return (
@@ -435,9 +426,11 @@ def solve_task(
         | None
     ) = None
 
-    if (
-        staging_path.exists()
-        or backup_path.exists()
+    if publish_recovery_needed(
+        final_output_dir=(
+            final_output_dir
+        ),
+        run_id=run_id,
     ):
         recovery = (
             recover_publish_state(
