@@ -74,6 +74,10 @@ from agent.offline_derivatives import (
     TwoAssetDerivativesSkill,
 )
 
+from agent.offline_filing_alpha import (
+    FilingEventAlphaSkill,
+)
+
 from agent.offline_macro_event_study import (
     MacroTextEventStudySkill,
 )
@@ -646,6 +650,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     AsianOptionSkill(),
     VarianceSwapReplicationSkill(),
     TwoAssetDerivativesSkill(),
+    FilingEventAlphaSkill(),
     MacroTextEventStudySkill(),
     EventStudySkill(),
     IntradayRealizedVolatilitySkill(),
