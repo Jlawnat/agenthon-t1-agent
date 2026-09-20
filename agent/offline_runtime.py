@@ -177,6 +177,10 @@ from agent.offline_composite import (
     CompositeFinanceSkill,
 )
 
+from agent.offline_code_migration import (
+    PolarsApiMigrationSkill,
+)
+
 from agent.offline_router import (
     rank_fallback_candidates,
 )
@@ -849,6 +853,7 @@ def _copy_candidate_outputs(candidate_dir: Path, out_dir: Path) -> None:
 
 
 _SKILLS: tuple[OfflineSkill, ...] = (
+    PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
     EwmaPortfolioRiskDecompositionSkill(),
