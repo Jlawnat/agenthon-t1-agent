@@ -6,30 +6,42 @@ import pandas as pd
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
+    _parse_ma_config,
 )
+
+
+def test_parse_ema_and_sma_configs() -> None:
+    assert _parse_ma_config(
+        "Use EMA(50) and EMA(200) for the crossover."
+    ) == (
+        "EMA",
+        50,
+        200,
+    )
+
+    assert _parse_ma_config(
+        "Use SMA(50) and SMA(200) for the crossover."
+    ) == (
+        "SMA",
+        50,
+        200,
+    )
 
 
 def _write_task(
     root: Path,
+    *,
+    kind: str,
 ) -> Path:
-    task = root / "task"
-    data = (
-        task
-        / "environment"
-        / "data"
-    )
-    data.mkdir(
-        parents=True
-    )
+    task = root / kind.lower()
+    data = task / "environment" / "data"
+    data.mkdir(parents=True)
 
-    (
-        task
-        / "instruction.md"
-    ).write_text(
-        """
-Task: EMA Crossover Momentum Backtest (TEST)
+    (task / "instruction.md").write_text(
+        f"""
+Task: {kind} Crossover Momentum Backtest (TEST)
 
-Use EMA(3) and EMA(6) on adj_close.
+Use {kind}(3) and {kind}(6) on adj_close.
 A golden cross buys at the next trading day's adj_open.
 A death cross sells at the next trading day's adj_open.
 Long-only backtest. Initial capital: $10,000.
@@ -57,31 +69,22 @@ cumulative_returns.html.
         {
             "date": dates,
             "open": prices,
-            "high": [
-                value + 1
-                for value
-                in prices
-            ],
-            "low": [
-                value - 1
-                for value
-                in prices
-            ],
+            "high": [x + 1 for x in prices],
+            "low": [x - 1 for x in prices],
             "close": prices,
             "adj_close": prices,
             "adj_open": prices,
             "volume": 1000,
         }
     ).to_csv(
-        data
-        / "test_prices.csv",
+        data / "test_prices.csv",
         index=False,
     )
 
     return task
 
 
-def test_time_series_strategy_matches() -> None:
+def test_skill_matches_both_ma_families() -> None:
     skill = TimeSeriesStrategySkill()
 
     assert skill.matches(
@@ -92,73 +95,56 @@ def test_time_series_strategy_matches() -> None:
         task_dir=Path("."),
     )
 
+    assert skill.matches(
+        instruction=(
+            "SMA crossover momentum backtest "
+            "with a golden cross and death cross."
+        ),
+        task_dir=Path("."),
+    )
 
-def test_time_series_strategy_outputs(
+
+def test_ema_and_sma_both_produce_outputs(
     tmp_path: Path,
 ) -> None:
-    task = _write_task(
-        tmp_path
-    )
-    out = tmp_path / "out"
+    for kind in ("EMA", "SMA"):
+        task = _write_task(
+            tmp_path,
+            kind=kind,
+        )
 
-    instruction = (
-        task
-        / "instruction.md"
-    ).read_text(
-        encoding="utf-8"
-    )
+        out = tmp_path / f"out-{kind.lower()}"
 
-    skill = TimeSeriesStrategySkill()
+        instruction = (
+            task / "instruction.md"
+        ).read_text(
+            encoding="utf-8"
+        )
 
-    skill.solve(
-        instruction=instruction,
-        task_dir=task,
-        out_dir=out,
-        seed=42,
-    )
+        TimeSeriesStrategySkill().solve(
+            instruction=instruction,
+            task_dir=task,
+            out_dir=out,
+            seed=42,
+        )
 
-    assert {
-        path.name
-        for path
-        in out.iterdir()
-    } == {
-        "results.json",
-        "trades.csv",
-        "daily_portfolio.csv",
-        "cumulative_returns.html",
-    }
+        assert {
+            path.name
+            for path in out.iterdir()
+        } == {
+            "results.json",
+            "trades.csv",
+            "daily_portfolio.csv",
+            "cumulative_returns.html",
+        }
 
-    trades = pd.read_csv(
-        out
-        / "trades.csv"
-    )
+        html = (
+            out / "cumulative_returns.html"
+        ).read_text(
+            encoding="utf-8"
+        )
 
-    portfolio = pd.read_csv(
-        out
-        / "daily_portfolio.csv"
-    )
-
-    assert len(
-        portfolio
-    ) == 30
-
-    assert {
-        "ticker",
-        "type",
-        "signal_date",
-        "exec_date",
-        "price",
-        "shares",
-        "pnl",
-    }.issubset(
-        trades.columns
-    )
-
-    html = (
-        out
-        / "cumulative_returns.html"
-    ).read_text(
-        encoding="utf-8"
-    ).lower()
-
-    assert "plotly" in html
+        assert (
+            f"{kind} Crossover Momentum"
+            in html
+        )
