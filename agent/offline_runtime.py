@@ -142,8 +142,32 @@ from agent.offline_volatility import (
     OhlcVolatilitySkill,
 )
 
+from agent.offline_credit_spread import (
+    CreditSpreadDecompositionSkill,
+)
+
+from agent.offline_fx_carry_hedge import (
+    FxCarryForwardHedgeSkill,
+)
+
+from agent.offline_pca_factor import (
+    PcaFactorPortfolioSkill,
+)
+
+from agent.offline_barrier_garch import (
+    BarrierGarchVarSkill,
+)
+
+from agent.offline_copula_sampling import (
+    CopulaSamplingSkill,
+)
+
+from agent.offline_cap_floor import (
+    InterestRateCapFloorSkill,
+)
+
 from agent.offline_router import (
-    select_fallback_skill,
+    rank_fallback_candidates,
 )
 
 class OfflineSkill(Protocol):
@@ -680,7 +704,53 @@ class BlackScholesGreeksSkill:
         )
 
 
+
+def _expected_output_files(instruction: str) -> set[str]:
+    import re
+
+    patterns = (
+        r"/app/output/([A-Za-z0-9_.-]+\.(?:json|csv))",
+        r"/output/([A-Za-z0-9_.-]+\.(?:json|csv))",
+    )
+    expected: set[str] = set()
+    for pattern in patterns:
+        expected.update(re.findall(pattern, instruction, flags=re.IGNORECASE))
+    return expected
+
+
+def _candidate_output_complete(candidate_dir: Path, instruction: str) -> bool:
+    expected = _expected_output_files(instruction)
+    if not expected:
+        return any(candidate_dir.iterdir())
+    actual = {path.name for path in candidate_dir.iterdir() if path.is_file()}
+    return expected.issubset(actual)
+
+
+def _copy_candidate_outputs(candidate_dir: Path, out_dir: Path) -> None:
+    import shutil
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for path in out_dir.iterdir():
+        if path.is_file() or path.is_symlink():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+
+    for source in candidate_dir.iterdir():
+        target = out_dir / source.name
+        if source.is_dir():
+            shutil.copytree(source, target)
+        else:
+            shutil.copy2(source, target)
+
+
 _SKILLS: tuple[OfflineSkill, ...] = (
+    CreditSpreadDecompositionSkill(),
+    FxCarryForwardHedgeSkill(),
+    PcaFactorPortfolioSkill(),
+    BarrierGarchVarSkill(),
+    CopulaSamplingSkill(),
+    InterestRateCapFloorSkill(),
     BlackScholesGreeksSkill(),
     BollingerBacktestSkill(),
     TimeSeriesStrategySkill(),
@@ -724,40 +794,88 @@ def solve_offline(
     out_dir: Path,
     seed: int,
 ) -> str:
-    instruction = _read_instruction(
-        task_dir
-    )
+    import tempfile
+
+    instruction = _read_instruction(task_dir)
+
+    direct_matches = []
+    direct_names = set()
 
     for skill in _SKILLS:
-        if skill.matches(
-            instruction=instruction,
-            task_dir=task_dir,
-        ):
-            skill.solve(
+        try:
+            matched = skill.matches(
                 instruction=instruction,
                 task_dir=task_dir,
-                out_dir=out_dir,
-                seed=seed,
             )
-            return skill.name
+        except Exception:
+            matched = False
 
-    fallback = select_fallback_skill(
+        if matched:
+            direct_matches.append(skill)
+            direct_names.add(skill.name)
+
+    ranked = rank_fallback_candidates(
         instruction=instruction,
         task_dir=task_dir,
         skills=_SKILLS,
     )
 
-    if fallback is not None:
-        fallback.solve(
-            instruction=instruction,
-            task_dir=task_dir,
-            out_dir=out_dir,
-            seed=seed,
-        )
-        return fallback.name
+    by_name = {skill.name: skill for skill in _SKILLS}
+    fallback_matches = [
+        by_name[candidate.skill_name]
+        for candidate in ranked
+        if candidate.skill_name not in direct_names
+        and candidate.semantic_score >= 3
+        and candidate.total_score >= 5
+    ]
+
+    candidates = direct_matches + fallback_matches
+    failures = []
+
+    out_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    for index, skill in enumerate(candidates):
+        try:
+            with tempfile.TemporaryDirectory(
+                prefix=f"offline-{index:02d}-",
+                dir=str(out_dir.parent),
+            ) as tmp:
+                candidate_dir = Path(tmp)
+
+                skill.solve(
+                    instruction=instruction,
+                    task_dir=task_dir,
+                    out_dir=candidate_dir,
+                    seed=seed,
+                )
+
+                if not _candidate_output_complete(
+                    candidate_dir,
+                    instruction,
+                ):
+                    failures.append(
+                        f"{skill.name}: output contract incomplete"
+                    )
+                    continue
+
+                _copy_candidate_outputs(
+                    candidate_dir,
+                    out_dir,
+                )
+                return skill.name
+
+        except Exception as exc:
+            failures.append(
+                f"{skill.name}: {type(exc).__name__}: {exc}"
+            )
+            continue
+
+    detail = "; ".join(failures[-6:])
+    if detail:
+        detail = " Candidates tried: " + detail
 
     raise RuntimeError(
-        "No offline solver skill matched this task. "
-        "No sufficiently confident generic capability route "
-        "was found. Model runtime is unavailable."
+        "No offline solver skill matched or completed this task with the "
+        "requested output contract. Model runtime is unavailable."
+        + detail
     )
