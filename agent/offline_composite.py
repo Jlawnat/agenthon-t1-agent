@@ -31,6 +31,7 @@ from agent.finance_primitives import (
     solve_breakeven_volatility,
 )
 from agent.finance_schema import TaskDataCatalog
+from agent.finance_multimodal import run_multimodal_alpha_workflow
 from agent.finance_derivatives_mc import (
     run_cliquet_workflow,
     run_mc_greek_surface_workflow,
@@ -992,6 +993,9 @@ class CompositeFinanceSkill:
     ) -> None:
         del seed
         plan = plan_finance_task(instruction, task_dir)
+        if plan.executable_recipe == "multimodal-alpha-process-analysis":
+            run_multimodal_alpha_workflow(task_dir, out_dir)
+            return
         if plan.executable_recipe == "cliquet-forward-start-analysis":
             run_cliquet_workflow(task_dir, out_dir)
             return

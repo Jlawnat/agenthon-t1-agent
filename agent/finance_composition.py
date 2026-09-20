@@ -312,7 +312,160 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
     ):
         caps.add("mc_convergence")
 
+    if (
+        _contains(
+            text,
+            "edgar",
+            "filing",
+            "filings",
+        )
+        and _contains(
+            text,
+            "gdelt",
+            "news",
+        )
+        and (
+            _contains(
+                text,
+                "issuer activity",
+                "insider activity",
+                "insider",
+            )
+            or _contains(
+                text,
+                "cot",
+                "macro context",
+                "macro",
+            )
+        )
+    ):
+        caps.add("multimodal_issuer_panel")
+        score += 2
+
+    if _contains(
+        text,
+        "four-agent",
+        "four agent",
+        "committee fusion",
+        "fundamental committee",
+    ):
+        caps.add("committee_fusion")
+        score += 2
+
+    if (
+        _contains(
+            text,
+            "vendor bulletin",
+            "vendor bulletins",
+            "reference mismatch",
+            "reference vintage",
+            "reference vintages",
+        )
+        or (
+            _contains(
+                text,
+                "audit",
+                "audit agent",
+            )
+            and _contains(
+                text,
+                "committee",
+                "four-agent",
+                "four agent",
+            )
+        )
+    ):
+        caps.add("audit_vintage_checks")
+
+    if (
+        _contains(text, "martingale")
+        and _contains(text, "gbm")
+        and _contains(
+            text,
+            "merton",
+            "jump-diffusion",
+            "jump diffusion",
+        )
+        and _contains(
+            text,
+            "ou",
+            "ornstein-uhlenbeck",
+            "ornstein uhlenbeck",
+        )
+    ):
+        caps.add("process_model_selection")
+        score += 2
+
+    if _contains(
+        text,
+        "disagreement penalty",
+        "committee dispersion",
+        "agreement multiplier",
+    ):
+        caps.add("committee_disagreement")
+
+    if _contains(
+        text,
+        "long/short",
+        "long-short",
+        "long short",
+    ) and _contains(
+        text,
+        "portfolio",
+        "portfolio construction",
+    ):
+        caps.add("long_short_portfolio")
+
     recipe = None
+
+    multimodal_required = {
+        "multimodal_issuer_panel",
+        "committee_fusion",
+        "audit_vintage_checks",
+        "process_model_selection",
+        "committee_disagreement",
+        "long_short_portfolio",
+    }
+    multimodal_schema = (
+        catalog.has_csv({
+            "asof_date",
+            "ticker",
+            "revenue_growth_ttm",
+            "gross_margin_ttm",
+            "debt_to_assets",
+            "cash_to_assets",
+        })
+        and catalog.has_csv({
+            "asof_date",
+            "ticker",
+            "article_count_7d",
+            "article_count_30d",
+            "avg_tone_30d",
+        })
+        and catalog.has_csv({
+            "asof_date",
+            "ticker",
+            "entry_date",
+            "exit_date",
+            "forward_return_21d",
+        })
+        and catalog.has_json({
+            "filing_weight",
+            "issuer_activity_weight",
+            "news_weight",
+            "audit_weight",
+            "process_trailing_window",
+            "process_min_history",
+            "process_conviction_scale",
+            "jump_threshold_sigma",
+        })
+    )
+    if (
+        multimodal_required.issubset(caps)
+        and multimodal_schema
+    ):
+        recipe = "multimodal-alpha-process-analysis"
+        score += 6
 
     cliquet_required = {
         "historical_volatility",
