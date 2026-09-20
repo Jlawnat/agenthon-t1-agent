@@ -74,6 +74,10 @@ from agent.offline_asian_options import (
     AsianOptionSkill,
 )
 
+from agent.offline_delta_hedging import (
+    DeltaHedgingPnlSkill,
+)
+
 from agent.offline_option_parity_audit import (
     OptionParityAuditSkill,
 )
@@ -84,6 +88,10 @@ from agent.offline_variance_swap import (
 
 from agent.offline_derivatives import (
     TwoAssetDerivativesSkill,
+)
+
+from agent.offline_form4_sale_pressure import (
+    Form4SalePressureSkill,
 )
 
 from agent.offline_filing_alpha import (
@@ -662,9 +670,11 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     FixedIncomeCurveSkill(),
     LookbackOptionSkill(),
     AsianOptionSkill(),
+    DeltaHedgingPnlSkill(),
     OptionParityAuditSkill(),
     VarianceSwapReplicationSkill(),
     TwoAssetDerivativesSkill(),
+    Form4SalePressureSkill(),
     FilingEventAlphaSkill(),
     MacroTextEventStudySkill(),
     EventStudySkill(),
