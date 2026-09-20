@@ -62,6 +62,16 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
         caps.add("curve_bootstrap")
     if _contains(text, "fx forward", "forward points"):
         caps.add("fx_forward_curve")
+    if _contains(text, "libor", "projection curve", "fra"):
+        caps.add("projection_curve")
+    if _contains(text, "historical fixing", "historical fixings", "fixing date"):
+        caps.add("fixing_aware_coupons")
+    if _contains(text, "reset notional", "reset notionals", "mtm reset", "mark-to-market"):
+        caps.add("mtm_notional_resets")
+    if _contains(text, "collateral", "collateralized", "collateralised"):
+        caps.add("collateralized_discounting")
+    if _contains(text, "stress scenario", "stress scenarios", "stress_results"):
+        caps.add("stress_revaluation")
 
     if _contains(text, "fama-french", "fama french", "factor model"):
         caps.add("factor_ols")
@@ -98,6 +108,57 @@ def plan_finance_task(instruction: str, task_dir: Path) -> CompositionPlan:
         caps.add("var_es")
 
     recipe = None
+
+    xccy_required = {
+        "xccy_cashflow_engine",
+        "curve_bootstrap",
+        "fx_forward_curve",
+        "projection_curve",
+        "fixing_aware_coupons",
+        "mtm_notional_resets",
+        "collateralized_discounting",
+        "stress_revaluation",
+    }
+    xccy_schema = (
+        catalog.has_json(
+            {
+                "valuation_date",
+                "spot_date",
+                "fx_pair",
+                "collateral_currency",
+                "usd_notional",
+                "contract_spread_bps",
+                "inception_spot_fx",
+            }
+        )
+        and catalog.has_csv(
+            {
+                "quote_time",
+                "curve",
+                "instrument_type",
+                "tenor",
+                "start_date",
+                "end_date",
+                "ccy_or_pair",
+                "quote_unit",
+                "quote_value",
+            }
+        )
+        and catalog.has_csv({"fixing_date", "index_name", "rate_pct"})
+        and catalog.has_csv(
+            {
+                "period_id",
+                "accrual_start",
+                "accrual_end",
+                "payment_date",
+                "reset_date",
+                "fixing_date",
+            }
+        )
+    )
+    if xccy_required.issubset(caps) and xccy_schema:
+        recipe = "xccy-desk-analysis"
+        score += 5
 
     fd_required = {
         "crank_nicolson_pde",

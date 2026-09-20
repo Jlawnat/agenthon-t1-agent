@@ -31,6 +31,7 @@ from agent.finance_primitives import (
     solve_breakeven_volatility,
 )
 from agent.finance_schema import TaskDataCatalog
+from agent.finance_xccy import run_xccy_workflow
 
 
 def _solve_structured_product(task_dir: Path, out_dir: Path) -> None:
@@ -983,6 +984,9 @@ class CompositeFinanceSkill:
     ) -> None:
         del seed
         plan = plan_finance_task(instruction, task_dir)
+        if plan.executable_recipe == "xccy-desk-analysis":
+            run_xccy_workflow(task_dir, out_dir, instruction)
+            return
         if plan.executable_recipe == "finite-difference-option-analysis":
             _solve_finite_difference_option_analysis(instruction, out_dir)
             return
