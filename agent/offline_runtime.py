@@ -173,6 +173,10 @@ from agent.offline_cap_floor import (
     InterestRateCapFloorSkill,
 )
 
+from agent.offline_composite import (
+    CompositeFinanceSkill,
+)
+
 from agent.offline_router import (
     rank_fallback_candidates,
 )
@@ -845,6 +849,7 @@ def _copy_candidate_outputs(candidate_dir: Path, out_dir: Path) -> None:
 
 
 _SKILLS: tuple[OfflineSkill, ...] = (
+    CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
     EwmaPortfolioRiskDecompositionSkill(),
     HullWhiteSwaptionSkill(),
