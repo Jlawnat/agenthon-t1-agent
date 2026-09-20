@@ -38,6 +38,10 @@ from agent.offline_risk import (
     MarketRiskSkill,
 )
 
+from agent.offline_fixed_income import (
+    FixedIncomeCurveSkill,
+)
+
 class OfflineSkill(Protocol):
     name: str
 
@@ -581,6 +585,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     AlphaHedgeStrategySkill(),
     PortfolioStrategySkill(),
     MarketRiskSkill(),
+    FixedIncomeCurveSkill(),
 )
 
 
