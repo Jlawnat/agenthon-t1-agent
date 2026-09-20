@@ -265,6 +265,31 @@ Do not use Markdown.
 Do not use code fences.
 Do not include explanations before or after the code.
 
+Generalization protocol for unfamiliar domains:
+1. Build a contract map first: required inputs, required outputs, schemas,
+   units, ordering rules, named formulas/methods, seeds, and tolerances.
+2. Inspect the supplied data context before assuming filenames or schemas.
+   For archives, TSV, XBRL/XML/HTML, JSON, or unusual inputs, discover
+   structure programmatically from the task data rather than hardcoding
+   benchmark values.
+3. Decompose the task into generic primitives such as parsing, filtering,
+   joins, aggregation, rolling windows, calibration, simulation,
+   optimization, root finding, numerical integration, portfolio accounting,
+   and serialization. Reuse standard mathematical identities and the exact
+   named method from the contract; write only the missing glue.
+4. Implement the solution self-contained in solver.py. Do not require the
+   existence of a task-specific solver, task ID, hidden reference value, or
+   checker behavior.
+5. Before writing final outputs, run internal consistency checks that can be
+   derived from the public contract: probability/range bounds, monotonicity,
+   sum/reconciliation identities, accounting identities, no-arbitrage
+   relations, row coverage, date causality, and exact allocation totals when
+   relevant.
+6. If two independent computations are practical, use the second as a
+   diagnostic rather than hardcoding its expected answer.
+7. Prefer a robust generic implementation that would still work if input
+   values changed while the public schema and task definition stayed the same.
+
 Requirements:
 - Follow the task instruction exactly.
 - Respect all required output filenames and schemas.

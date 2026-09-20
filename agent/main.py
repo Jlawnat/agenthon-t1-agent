@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from agent.model_client import ModelClient
@@ -144,6 +146,48 @@ def solve(
             seed=seed,
         )
         return
+
+    # Hybrid generalization path:
+    #
+    # 1. Prefer the deterministic library when it can satisfy the complete
+    #    output contract.
+    # 2. If no deterministic skill can complete the task, fall through to
+    #    the generic model-driven planner/generator/validator/repair loop.
+    #
+    # The deterministic probe writes into an isolated temporary directory so
+    # a failed or incomplete attempt cannot contaminate final output.
+    with tempfile.TemporaryDirectory(
+        prefix="offline-probe-",
+        dir=str(work_root),
+    ) as temporary:
+        probe_output = Path(temporary) / "output"
+
+        try:
+            solve_offline(
+                task_dir=task_dir,
+                out_dir=probe_output,
+                seed=seed,
+            )
+        except Exception:
+            # An unfamiliar domain is expected to reach this path.
+            pass
+        else:
+            if not probe_output.is_dir():
+                raise RuntimeError(
+                    "Offline solver reported success without an output directory."
+                )
+
+            if out_dir.exists():
+                if out_dir.is_dir():
+                    shutil.rmtree(out_dir)
+                else:
+                    out_dir.unlink()
+
+            shutil.copytree(
+                probe_output,
+                out_dir,
+            )
+            return
 
     model_client = ModelClient()
 

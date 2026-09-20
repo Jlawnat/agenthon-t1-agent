@@ -190,15 +190,17 @@ def _fallback_strategy_payload(
             ],
         },
         {
-            "approach_name": "independent_recomputation",
+            "approach_name": "primitive_composition",
             "objective": (
-                "Use an independently checkable quantitative "
-                "formulation where practical."
+                "Decompose an unfamiliar task into generic data, "
+                "statistical, numerical, finance, and serialization "
+                "primitives; implement only the missing glue needed "
+                "to satisfy the explicit contract."
             ),
             "verification_steps": [
-                "compute the result using the chosen primary method",
-                "independently reconcile high-value identities",
-                "check units, signs, timing, and tolerances",
+                "map each requested output back to an explicit task step",
+                "identify reusable primitives before writing bespoke logic",
+                "recompute at least one independent identity or invariant",
             ],
         },
         {
