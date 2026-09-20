@@ -66,6 +66,10 @@ from agent.offline_asian_options import (
     AsianOptionSkill,
 )
 
+from agent.offline_variance_swap import (
+    VarianceSwapReplicationSkill,
+)
+
 from agent.offline_derivatives import (
     TwoAssetDerivativesSkill,
 )
@@ -640,6 +644,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     CurveImmunizationSkill(),
     FixedIncomeCurveSkill(),
     AsianOptionSkill(),
+    VarianceSwapReplicationSkill(),
     TwoAssetDerivativesSkill(),
     MacroTextEventStudySkill(),
     EventStudySkill(),
