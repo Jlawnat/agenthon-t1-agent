@@ -137,6 +137,56 @@ def _profile_score(text: str, fp: TaskFingerprint, profile: dict) -> tuple[int, 
 
 
 _PROFILES = {
+
+    "copula-equity-fitting-domain": {
+        "terms": (
+            (5, ("copula fitting", "equity pair")),
+            (4, ("pseudo-observations", "kendall")),
+            (3, ("aic", "bic", "tail dependence")),
+        ),
+        "csv": ((("date", "symbol", "close"), 5),),
+    },
+    "ewma-portfolio-risk-decomposition-domain": {
+        "terms": (
+            (5, ("ewma",)),
+            (4, ("euler", "risk decomposition")),
+            (3, ("marginal risk", "component risk")),
+        ),
+        "json": ((("lambda", "confidence_level", "weights", "annualization_factor", "assets"), 5),),
+    },
+    "hull-white-swaption-domain": {
+        "terms": (
+            (6, ("hull-white",)),
+            (5, ("swaption",)),
+            (3, ("jamshidian", "trinomial tree", "bermudan")),
+        ),
+        "json": ((("discount_factors", "caplets", "swaptions", "tree"), 6),),
+    },
+    "ipca-latent-factors-domain": {
+        "terms": (
+            (6, ("ipca", "instrumented principal component")),
+            (4, ("latent factor", "alternating least squares")),
+            (3, ("characteristics", "grs")),
+        ),
+        "files": (((("returns.csv", "characteristics.csv", "params.json")), 5),),
+    },
+    "digital-barrier-options-domain": {
+        "terms": (
+            (5, ("digital", "cash-or-nothing")),
+            (4, ("barrier",)),
+            (3, ("gap option", "knockout", "knock-in")),
+        ),
+        "files": (((("spy_daily.csv",)), 5),),
+    },
+    "regime-riskparity-cvar-domain": {
+        "terms": (
+            (5, ("absorption ratio",)),
+            (4, ("risk parity", "risk-parity")),
+            (4, ("cvar", "expected shortfall")),
+            (3, ("eigenvalue", "regime")),
+        ),
+        "json": ((("rolling_window", "risk_budget", "cvar_confidence", "top_k_eigenvalues"), 5),),
+    },
     "portfolio-strategy-domain": {
         "terms": (
             (4, ("cross-sectional momentum", "cross sectional momentum")),

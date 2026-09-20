@@ -141,3 +141,27 @@ def test_output_contract_does_not_confuse_inputs_with_outputs() -> None:
         "tail_dependence.csv",
         "summary.json",
     }
+
+
+def test_output_contract_ignores_prose_input_reference_inside_output_section() -> None:
+    instruction = '''
+    ## Output
+
+    ### `/app/output/results.json`
+
+    ```json
+    {"portfolio_daily_vol": 0.01}
+    ```
+
+    ### `/app/output/solution.json`
+
+    ```json
+    {"intermediates": {}}
+    ```
+
+    Asset order matches `params.json`.
+    '''
+    assert _expected_output_files(instruction) == {
+        "results.json",
+        "solution.json",
+    }

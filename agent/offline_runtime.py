@@ -142,6 +142,13 @@ from agent.offline_volatility import (
     OhlcVolatilitySkill,
 )
 
+from agent.offline_copula_fitting import CopulaEquityFittingSkill
+from agent.offline_ewma_risk_decomp import EwmaPortfolioRiskDecompositionSkill
+from agent.offline_hull_white_swaption import HullWhiteSwaptionSkill
+from agent.offline_ipca_latent_factors import IpcaLatentFactorsSkill
+from agent.offline_digital_barrier_options import DigitalBarrierOptionsSkill
+from agent.offline_regime_riskparity import RegimeRiskParityCvarSkill
+
 from agent.offline_credit_spread import (
     CreditSpreadDecompositionSkill,
 )
@@ -708,10 +715,9 @@ class BlackScholesGreeksSkill:
 def _expected_output_files(instruction: str) -> set[str]:
     import re
 
-    extensions = r"(?:json|csv|parquet|txt|md)"
+    extensions = r"(?:json|csv|parquet|txt|md|png)"
     expected: set[str] = set()
 
-    # Explicit output paths anywhere in the instruction.
     explicit_patterns = (
         rf"/app/output/([A-Za-z0-9_.-]+\.{extensions})",
         rf"/output/([A-Za-z0-9_.-]+\.{extensions})",
@@ -726,7 +732,6 @@ def _expected_output_files(instruction: str) -> set[str]:
             )
         )
 
-    # Markdown sections that describe required outputs/deliverables.
     lines = instruction.splitlines()
     headings: list[tuple[int, int, str]] = []
 
@@ -758,6 +763,10 @@ def _expected_output_files(instruction: str) -> set[str]:
         flags=re.IGNORECASE,
     )
 
+    # Only accept filename mentions that structurally look like deliverables:
+    # output subheadings, list items, table cells, or explicit save/write lines.
+    # This avoids accidentally treating prose references such as
+    # "asset order matching params.json" as required outputs.
     for position, (start_line, level, title) in enumerate(headings):
         if not any(term in title for term in output_heading_terms):
             continue
@@ -768,13 +777,35 @@ def _expected_output_files(instruction: str) -> set[str]:
                 end_line = next_start
                 break
 
-        block = "\n".join(lines[start_line + 1:end_line])
-        expected.update(
-            match.lower()
-            for match in filename_pattern.findall(block)
-        )
+        for raw_line in lines[start_line + 1:end_line]:
+            stripped = raw_line.strip()
+            lower = stripped.lower()
 
-    # Imperative one-line contracts outside a dedicated Output section.
+            structural = (
+                bool(re.match(r"^#{1,6}\s+", stripped))
+                or bool(re.match(r"^[-*+]\s+", stripped))
+                or bool(re.match(r"^\d+[.)]\s+", stripped))
+                or stripped.startswith("|")
+                or any(
+                    verb in lower
+                    for verb in (
+                        "save ",
+                        "write ",
+                        "create ",
+                        "produce ",
+                        "emit ",
+                        "export ",
+                    )
+                )
+            )
+            if not structural:
+                continue
+
+            expected.update(
+                match.lower()
+                for match in filename_pattern.findall(stripped)
+            )
+
     imperative_pattern = re.compile(
         rf"(?:save|write|create|produce|emit|export)"
         rf"[^\n]{{0,160}}?"
@@ -814,6 +845,12 @@ def _copy_candidate_outputs(candidate_dir: Path, out_dir: Path) -> None:
 
 
 _SKILLS: tuple[OfflineSkill, ...] = (
+    CopulaEquityFittingSkill(),
+    EwmaPortfolioRiskDecompositionSkill(),
+    HullWhiteSwaptionSkill(),
+    IpcaLatentFactorsSkill(),
+    DigitalBarrierOptionsSkill(),
+    RegimeRiskParityCvarSkill(),
     CreditSpreadDecompositionSkill(),
     FxCarryForwardHedgeSkill(),
     PcaFactorPortfolioSkill(),
