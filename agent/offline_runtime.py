@@ -21,6 +21,10 @@ from agent.offline_cir import (
     CirBondPricingSkill,
 )
 
+from agent.offline_tca import (
+    BinanceParticipationTcaSkill,
+)
+
 
 class OfflineSkill(Protocol):
     name: str
@@ -561,6 +565,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     BollingerBacktestSkill(),
     BrinsonSectorAttributionSkill(),
     CirBondPricingSkill(),
+    BinanceParticipationTcaSkill(),
 )
 
 
