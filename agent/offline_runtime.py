@@ -62,6 +62,10 @@ from agent.offline_fixed_income import (
     FixedIncomeCurveSkill,
 )
 
+from agent.offline_lookback_options import (
+    LookbackOptionSkill,
+)
+
 from agent.offline_asian_options import (
     AsianOptionSkill,
 )
@@ -647,6 +651,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     DualCurveBootstrapSkill(),
     CurveImmunizationSkill(),
     FixedIncomeCurveSkill(),
+    LookbackOptionSkill(),
     AsianOptionSkill(),
     VarianceSwapReplicationSkill(),
     TwoAssetDerivativesSkill(),
