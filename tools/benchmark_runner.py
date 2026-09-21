@@ -798,6 +798,8 @@ def _docker_environment_args(
         "MODEL_TOKEN",
         "QFBENCH_SEED",
         "QFBENCH_NETWORK",
+        "AGENT_WORK_ROOT",
+        "MPLCONFIGDIR",
     )
 
     result: list[str] = []
@@ -828,9 +830,25 @@ def build_agent_command(
         "--rm",
         "--network",
         network,
+        "--read-only",
+        "--user",
+        "65534:65534",
+        "--cap-drop=ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777",
+        "--pids-limit",
+        "256",
+        "--ulimit",
+        "nofile=1024:1024",
+        "--ulimit",
+        "nproc=256:256",
         *_docker_environment_args(environment),
         "-v",
         f"{unit_dir.resolve()}:/input:ro",
+        "-v",
+        f"{output_dir.resolve()}:/output",
         "-v",
         f"{output_dir.resolve()}:/app/output",
         image,
@@ -857,6 +875,47 @@ def build_verifier_command(
     ]
 
 
+def _checker_input_mount_args(
+    unit_dir: Path,
+) -> list[str]:
+    """Reproduce the task environment's data layout for public checkers.
+
+    QFBench units use both conventions:
+      COPY data/ /app/data/
+    and
+      COPY data/ /app/
+
+    Mount the source data at both locations so the checker sees the same
+    task inputs it would see in the task-specific environment image.
+    """
+    data_dir = (
+        unit_dir
+        / "environment"
+        / "data"
+    )
+
+    if not data_dir.is_dir():
+        return []
+
+    args = [
+        "-v",
+        f"{data_dir.resolve()}:/app/data:ro",
+    ]
+
+    for child in sorted(
+        data_dir.iterdir(),
+        key=lambda x: x.name,
+    ):
+        args.extend(
+            [
+                "-v",
+                f"{child.resolve()}:/app/{child.name}:ro",
+            ]
+        )
+
+    return args
+
+
 def build_checker_command(
     *,
     unit_dir: Path,
@@ -872,8 +931,13 @@ def build_checker_command(
         "OUTPUT_DIR=/app/output",
         "-e",
         "PYTHONDONTWRITEBYTECODE=1",
+        *_checker_input_mount_args(unit_dir),
         "-v",
         f"{unit_dir.resolve()}:/input:ro",
+        "-v",
+        f"{(unit_dir.resolve() / 'checks')}:/tests:ro",
+        "-v",
+        f"{(output_dir.parent / 'checker_logs').resolve()}:/logs",
         "-v",
         f"{output_dir.resolve()}:/app/output",
         "-v",
@@ -962,6 +1026,17 @@ def run_smoke(
         parents=True,
         exist_ok=True,
     )
+    output_dir.chmod(0o777)
+
+    checker_logs_dir = (
+        output_dir.parent
+        / "checker_logs"
+    )
+    checker_logs_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    checker_logs_dir.chmod(0o777)
 
     log_path.parent.mkdir(
         parents=True,
@@ -1015,9 +1090,13 @@ def run_smoke(
         output_dir=output_dir,
     )
 
-    verifier_command = build_verifier_command(
-        unit_dir=unit_dir,
-        output_dir=output_dir,
+    verifier_command = (
+        build_verifier_command(
+            unit_dir=unit_dir,
+            output_dir=output_dir,
+        )
+        if shutil.which("qfbench2") is not None
+        else None
     )
 
     started = (
@@ -1072,7 +1151,8 @@ def run_smoke(
         verifier_timed_out = False
 
         if (
-            not agent_timed_out
+            agent_return_code == 0
+            and not agent_timed_out
             and launch_error is None
             and not deadline_expired()
         ):
@@ -1090,36 +1170,38 @@ def run_smoke(
             )
             launch_error = checker_error
         elif (
-            not agent_timed_out
+            agent_return_code == 0
+            and not agent_timed_out
             and launch_error is None
         ):
             checker_timed_out = True
 
-        if (
-            not agent_timed_out
-            and launch_error is None
-            and not checker_timed_out
-            and not deadline_expired()
-        ):
-            verifier_return_code, verifier_timed_out, verifier_error = (
-                _run_logged_command(
-                    command=verifier_command,
-                    cwd=repo,
-                    environment=environment,
-                    timeout_seconds=phase_timeout(
-                        verifier_timeout_seconds
-                    ),
-                    log_handle=log_handle,
-                    label="verifier",
+        if verifier_command is not None:
+            if (
+                not agent_timed_out
+                and launch_error is None
+                and not checker_timed_out
+                and not deadline_expired()
+            ):
+                verifier_return_code, verifier_timed_out, verifier_error = (
+                    _run_logged_command(
+                        command=verifier_command,
+                        cwd=repo,
+                        environment=environment,
+                        timeout_seconds=phase_timeout(
+                            verifier_timeout_seconds
+                        ),
+                        log_handle=log_handle,
+                        label="verifier",
+                    )
                 )
-            )
-            launch_error = verifier_error
-        elif (
-            not agent_timed_out
-            and launch_error is None
-            and not checker_timed_out
-        ):
-            verifier_timed_out = True
+                launch_error = verifier_error
+            elif (
+                not agent_timed_out
+                and launch_error is None
+                and not checker_timed_out
+            ):
+                verifier_timed_out = True
 
     elapsed = (
         time.perf_counter()
@@ -1419,9 +1501,13 @@ def main() -> int:
         "docker"
     )
 
-    check_command(
-        "qfbench2"
-    )
+    # qfbench2 is required for a model-backed official smoke run,
+    # but the offline crash-recovery sweep can use each unit's
+    # public checks/test.sh directly.
+    if not args.allow_offline:
+        check_command(
+            "qfbench2"
+        )
 
     image_id = docker_image_id(
         args.image
@@ -1753,9 +1839,13 @@ def main() -> int:
             output_dir=output_dir,
             image=args.image,
             network=(
-                "qfb2-eval"
-                if eval_network
-                else "none"
+                "none"
+                if args.allow_offline
+                else (
+                    "qfb2-eval"
+                    if eval_network
+                    else "none"
+                )
             ),
             agent_timeout_seconds=agent_timeout,
             verifier_timeout_seconds=(

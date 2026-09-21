@@ -49,6 +49,9 @@ from agent.offline_bl_regime_hmm import (
 from agent.offline_sec_10k import (
     Sec10KLongExtractionSkill,
 )
+from agent.offline_regime_cta_vol_target import (
+    RegimeCtaVolTargetSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -902,6 +905,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     IntradayVolumeExecutionSkill(),
     BlackLittermanRegimeHmmSkill(),
     Sec10KLongExtractionSkill(),
+    RegimeCtaVolTargetSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),

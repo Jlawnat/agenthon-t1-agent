@@ -113,6 +113,34 @@ class BenchmarkRunnerContractTests(unittest.TestCase):
         ])
         self.assertNotIn("--agent-image", command)
 
+    def test_checker_mounts_task_data_in_both_supported_layouts(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            unit = root / "unit"
+            data = unit / "environment" / "data"
+            output = root / "output"
+
+            data.mkdir(parents=True)
+            output.mkdir()
+            (data / "params.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
+
+            command = build_checker_command(
+                unit_dir=unit,
+                output_dir=output,
+            )
+
+            self.assertIn(
+                f"{data.resolve()}:/app/data:ro",
+                command,
+            )
+            self.assertIn(
+                f"{(data / 'params.json').resolve()}:/app/params.json:ro",
+                command,
+            )
+
     def test_verifier_command_matches_installed_qfbench2_contract(self) -> None:
         command = build_verifier_command(
             unit_dir=Path("/units/example"),
