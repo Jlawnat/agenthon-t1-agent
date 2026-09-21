@@ -865,6 +865,81 @@ def _expected_output_files(instruction: str) -> set[str]:
         for match in imperative_pattern.findall(instruction)
     )
 
+    # Do not mistake references to declared input files for output
+    # deliverables merely because they are mentioned inside an output
+    # description. Example:
+    #
+    #   ## Input Files
+    #   - swap_to_value.json
+    #
+    #   ## Required Output Files
+    #   ### swap_valuation.json
+    #   - pv01 uses a bump from swap_to_value.json
+    #
+    # The latter reference describes provenance, not another deliverable.
+    input_heading_terms = (
+        "input file",
+        "input files",
+        "input data",
+        "inputs",
+    )
+
+    input_mentions: set[str] = set()
+
+    for position, (start_line, level, title) in enumerate(headings):
+        normalized_title = title.strip().lower()
+
+        if not any(
+            term in normalized_title
+            for term in input_heading_terms
+        ):
+            continue
+
+        end_line = len(lines)
+
+        for next_start, next_level, _ in headings[position + 1:]:
+            if next_level <= level:
+                end_line = next_start
+                break
+
+        for raw_line in lines[start_line + 1:end_line]:
+            input_mentions.update(
+                match.lower()
+                for match in filename_pattern.findall(raw_line)
+            )
+
+    # A filename explicitly named in an output heading or as a concrete
+    # /app/output/... path remains an output even if it also appears in an
+    # input section.
+    output_heading_mentions: set[str] = set()
+
+    for _, _, title in headings:
+        output_heading_mentions.update(
+            match.lower()
+            for match in filename_pattern.findall(title)
+        )
+
+    explicit_output_mentions: set[str] = set()
+
+    for pattern in explicit_patterns:
+        explicit_output_mentions.update(
+            match.lower()
+            for match in re.findall(
+                pattern,
+                instruction,
+                flags=re.IGNORECASE,
+            )
+        )
+
+    protected_outputs = (
+        output_heading_mentions
+        | explicit_output_mentions
+    )
+
+    expected.difference_update(
+        input_mentions - protected_outputs
+    )
+
     return expected
 def _candidate_output_complete(candidate_dir: Path, instruction: str) -> bool:
     expected = _expected_output_files(instruction)
