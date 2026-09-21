@@ -133,6 +133,10 @@ class BenchmarkRunnerContractTests(unittest.TestCase):
             )
 
             self.assertIn(
+                f"{(data / 'params.json').resolve()}:/app/data/params.json:ro",
+                command,
+            )
+            self.assertNotIn(
                 f"{data.resolve()}:/app/data:ro",
                 command,
             )
