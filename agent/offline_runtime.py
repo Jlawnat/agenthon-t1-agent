@@ -73,6 +73,9 @@ from agent.offline_residual_momentum import (
 from agent.offline_stable_residual import (
     StableResidualSkill,
 )
+from agent.offline_cme_hdd import (
+    CmeHddOptionPricingSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -1009,6 +1012,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     StochVolImpliedSurfaceSkill(),
     ResidualMomentumSkill(),
     StableResidualSkill(),
+    CmeHddOptionPricingSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
