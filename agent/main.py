@@ -190,11 +190,20 @@ def solve(
                 else:
                     out_dir.unlink()
 
-            shutil.copytree(
-                probe_output,
-                out_dir,
-                dirs_exist_ok=True,
-            )
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy children rather than the directory root itself.
+            # A Docker bind-mount root may reject metadata changes.
+            for source in probe_output.iterdir():
+                target = out_dir / source.name
+                if source.is_dir() and not source.is_symlink():
+                    shutil.copytree(source, target)
+                else:
+                    shutil.copy2(
+                        source,
+                        target,
+                        follow_symlinks=False,
+                    )
             return
 
     model_client = ModelClient()
