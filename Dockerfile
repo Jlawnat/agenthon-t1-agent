@@ -1,6 +1,10 @@
 FROM finance-bench-sandbox:latest
 
-RUN pip install --no-cache-dir numba==0.61.0
+RUN pip install --no-cache-dir \
+    numba==0.61.0 \
+    pandas==2.2.3 \
+    scipy==1.15.2 \
+    arch==7.2.0
 
 LABEL qfbench2.interface_version="2.0"
 

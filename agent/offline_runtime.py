@@ -37,6 +37,12 @@ from agent.offline_geske import (
 from agent.offline_kelly_var import (
     KellyVarSizingSkill,
 )
+from agent.offline_cta_basel import (
+    CtaBaselCapitalSkill,
+)
+from agent.offline_intraday_volume import (
+    IntradayVolumeExecutionSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -886,6 +892,8 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     BaroneAdesiWhaleySkill(),
     CompoundOptionGeskeSkill(),
     KellyVarSizingSkill(),
+    CtaBaselCapitalSkill(),
+    IntradayVolumeExecutionSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
