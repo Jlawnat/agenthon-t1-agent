@@ -987,6 +987,70 @@ def build_checker_command(
     ]
 
 
+def build_post_generation_command(
+    *,
+    unit_dir: Path,
+    output_dir: Path,
+    checker_logs_dir: Path,
+) -> list[str] | None:
+    """Run unit-specific materialization required before checking."""
+    if unit_dir.name != "t1-polars-api-migration":
+        return None
+
+    test_input = (
+        unit_dir
+        / "checks"
+        / "ticker_data_test.csv"
+    )
+
+    if not test_input.is_file():
+        return None
+
+    python_code = (
+        "import importlib.util; "
+        "from pathlib import Path; "
+        "import polars as pl; "
+        "script = Path('/app/output/function-under-new-api.py'); "
+        "spec = importlib.util.spec_from_file_location("
+        "'migrated_pipeline', script); "
+        "module = importlib.util.module_from_spec(spec); "
+        "spec.loader.exec_module(module); "
+        "print('Polars runtime:', pl.__version__); "
+        "module.pipeline_new("
+        "pl, "
+        "'/tmp/ticker_data_test.csv', "
+        "'/app/output'"
+        "); "
+        "print('pipeline execution complete')"
+    )
+
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "-v",
+        f"{output_dir.resolve()}:/app/output",
+        "-v",
+        (
+            f"{test_input.resolve()}:"
+            "/tmp/ticker_data_test.csv:ro"
+        ),
+        "-v",
+        f"{checker_logs_dir.resolve()}:/logs",
+        "finance-bench-polars139:latest",
+        "sh",
+        "-c",
+        (
+            'python -c "$1" '
+            '> /logs/verifier/test_gen.log 2>&1'
+        ),
+        "sh",
+        python_code,
+    ]
+
+
 def _run_logged_command(
     *,
     command: list[str],
@@ -1077,6 +1141,16 @@ def run_smoke(
     )
     checker_logs_dir.chmod(0o777)
 
+    checker_verifier_logs_dir = (
+        checker_logs_dir
+        / "verifier"
+    )
+    checker_verifier_logs_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    checker_verifier_logs_dir.chmod(0o777)
+
     log_path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -1127,6 +1201,14 @@ def run_smoke(
     checker_command = build_checker_command(
         unit_dir=unit_dir,
         output_dir=output_dir,
+    )
+
+    post_generation_command = (
+        build_post_generation_command(
+            unit_dir=unit_dir,
+            output_dir=output_dir,
+            checker_logs_dir=checker_logs_dir,
+        )
     )
 
     verifier_command = (
@@ -1195,8 +1277,49 @@ def run_smoke(
             and launch_error is None
             and not deadline_expired()
         ):
-            checker_return_code, checker_timed_out, checker_error = (
-                _run_logged_command(
+            if post_generation_command is not None:
+                (
+                    post_generation_return_code,
+                    post_generation_timed_out,
+                    post_generation_error,
+                ) = _run_logged_command(
+                    command=post_generation_command,
+                    cwd=repo,
+                    environment=environment,
+                    timeout_seconds=phase_timeout(
+                        verifier_timeout_seconds
+                    ),
+                    log_handle=log_handle,
+                    label="post-generation",
+                )
+
+                launch_error = post_generation_error
+
+                if post_generation_timed_out:
+                    checker_timed_out = True
+
+                if (
+                    post_generation_return_code
+                    not in (None, 0)
+                ):
+                    log_handle.write(
+                        "\n[BENCHMARK RUNNER] "
+                        "post-generation command exited "
+                        f"{post_generation_return_code}; "
+                        "continuing to checker.\n"
+                    )
+                    log_handle.flush()
+
+            if (
+                launch_error is None
+                and not checker_timed_out
+                and not deadline_expired()
+            ):
+                (
+                    checker_return_code,
+                    checker_timed_out,
+                    checker_error,
+                ) = _run_logged_command(
                     command=checker_command,
                     cwd=repo,
                     environment=environment,
@@ -1206,8 +1329,14 @@ def run_smoke(
                     log_handle=log_handle,
                     label="checker",
                 )
-            )
-            launch_error = checker_error
+                launch_error = checker_error
+
+            elif (
+                launch_error is None
+                and not checker_timed_out
+            ):
+                checker_timed_out = True
+
         elif (
             agent_return_code == 0
             and not agent_timed_out
