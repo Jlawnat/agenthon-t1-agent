@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ast
-import importlib.util
 from pathlib import Path
 import re
 
@@ -349,6 +348,7 @@ def _explicit_input_csv(instruction: str, task_dir: Path) -> Path:
     )
 
 
+
 @dataclass(frozen=True)
 class PolarsApiMigrationSkill:
     name: str = "polars-api-migration"
@@ -391,7 +391,6 @@ class PolarsApiMigrationSkill:
             )
 
         source_path = sources[0]
-        input_csv = _explicit_input_csv(instruction, task_dir)
         source = source_path.read_text(
             encoding="utf-8",
             errors="replace",
@@ -405,23 +404,3 @@ class PolarsApiMigrationSkill:
             encoding="utf-8",
         )
 
-        import polars  # type: ignore
-
-        spec = importlib.util.spec_from_file_location(
-            "phase8h_migrated_polars_pipeline",
-            migrated_path,
-        )
-        if spec is None or spec.loader is None:
-            raise RuntimeError("Could not load migrated Polars pipeline.")
-
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        pipeline = getattr(module, "pipeline_new", None)
-        if not callable(pipeline):
-            raise RuntimeError("Migrated source does not expose pipeline_new.")
-
-        pipeline(
-            polars,
-            str(input_csv),
-            str(out_dir),
-        )
