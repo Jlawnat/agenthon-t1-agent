@@ -43,6 +43,12 @@ from agent.offline_cta_basel import (
 from agent.offline_intraday_volume import (
     IntradayVolumeExecutionSkill,
 )
+from agent.offline_bl_regime_hmm import (
+    BlackLittermanRegimeHmmSkill,
+)
+from agent.offline_sec_10k import (
+    Sec10KLongExtractionSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -894,6 +900,8 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     KellyVarSizingSkill(),
     CtaBaselCapitalSkill(),
     IntradayVolumeExecutionSkill(),
+    BlackLittermanRegimeHmmSkill(),
+    Sec10KLongExtractionSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
