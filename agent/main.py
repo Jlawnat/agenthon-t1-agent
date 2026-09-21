@@ -179,13 +179,21 @@ def solve(
 
             if out_dir.exists():
                 if out_dir.is_dir():
-                    shutil.rmtree(out_dir)
+                    # Preserve the output directory itself. On the competition
+                    # platform it may be a Docker bind-mount root such as
+                    # /app/output, which cannot be removed with rmtree().
+                    for child in out_dir.iterdir():
+                        if child.is_dir() and not child.is_symlink():
+                            shutil.rmtree(child)
+                        else:
+                            child.unlink()
                 else:
                     out_dir.unlink()
 
             shutil.copytree(
                 probe_output,
                 out_dir,
+                dirs_exist_ok=True,
             )
             return
 
