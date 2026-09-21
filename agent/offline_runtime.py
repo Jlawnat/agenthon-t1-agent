@@ -67,6 +67,9 @@ from agent.offline_localvol_barrier import (
 from agent.offline_stochvol_implied_surface import (
     StochVolImpliedSurfaceSkill,
 )
+from agent.offline_residual_momentum import (
+    ResidualMomentumSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -1001,6 +1004,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     DupireLocalVolSkill(),
     LocalVolBarrierSkill(),
     StochVolImpliedSurfaceSkill(),
+    ResidualMomentumSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
