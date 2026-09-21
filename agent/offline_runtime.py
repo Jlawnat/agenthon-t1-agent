@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import math
+import os
 from pathlib import Path
 from typing import Protocol
 
@@ -11,6 +12,12 @@ import pandas as pd
 
 from agent.offline_bollinger import (
     BollingerBacktestSkill,
+)
+from agent.offline_historical_var import (
+    HistoricalVarDataPrepSkill,
+)
+from agent.offline_double_sort import (
+    DoubleSortCornerSkill,
 )
 
 from agent.offline_time_series_strategy import (
@@ -853,6 +860,8 @@ def _copy_candidate_outputs(candidate_dir: Path, out_dir: Path) -> None:
 
 
 _SKILLS: tuple[OfflineSkill, ...] = (
+    HistoricalVarDataPrepSkill(),
+    DoubleSortCornerSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
@@ -904,6 +913,25 @@ _SKILLS: tuple[OfflineSkill, ...] = (
 )
 
 
+def _offline_temp_root() -> Path:
+    root = (
+        Path(
+            os.getenv(
+                "AGENT_WORK_ROOT",
+                "/tmp/agenthon-t1",
+            )
+        ).resolve()
+        / "offline"
+    )
+
+    root.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    return root
+
+
 def solve_offline(
     *,
     task_dir: Path,
@@ -950,11 +978,13 @@ def solve_offline(
 
     out_dir.parent.mkdir(parents=True, exist_ok=True)
 
+    temp_root = _offline_temp_root()
+
     for index, skill in enumerate(candidates):
         try:
             with tempfile.TemporaryDirectory(
                 prefix=f"offline-{index:02d}-",
-                dir=str(out_dir.parent),
+                dir=str(temp_root),
             ) as tmp:
                 candidate_dir = Path(tmp)
 
