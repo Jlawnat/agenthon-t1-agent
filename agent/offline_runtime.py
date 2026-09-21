@@ -76,6 +76,9 @@ from agent.offline_stable_residual import (
 from agent.offline_cme_hdd import (
     CmeHddOptionPricingSkill,
 )
+from agent.offline_etf_overlap_redemption import (
+    EtfOverlapRedemptionPressureSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -1013,6 +1016,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     ResidualMomentumSkill(),
     StableResidualSkill(),
     CmeHddOptionPricingSkill(),
+    EtfOverlapRedemptionPressureSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
