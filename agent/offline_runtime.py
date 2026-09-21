@@ -55,6 +55,9 @@ from agent.offline_regime_cta_vol_target import (
 from agent.offline_merton_jump_diffusion import (
     MertonJumpDiffusionSkill,
 )
+from agent.offline_sentiment_factor import (
+    SentimentFactorAlphaSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -985,6 +988,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     Sec10KLongExtractionSkill(),
     RegimeCtaVolTargetSkill(),
     MertonJumpDiffusionSkill(),
+    SentimentFactorAlphaSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
