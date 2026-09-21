@@ -22,6 +22,12 @@ PRIMITIVE_API_CATALOG = (
     "black_scholes_price(spot, strike, rate, dividend_yield, volatility, maturity, option_type) -> float",
     "black_scholes_greeks(spot, strike, rate, dividend_yield, volatility, maturity, option_type) -> dict",
     "historical_log_return_calibration(closes, annualization=252.0) -> dict",
+    "discount_cashflow(amount, rate, maturity) -> float",
+    "sma_seeded_ema(values, span) -> ndarray",
+    "ewma_annualized_volatility(log_returns, lookback, annualization=252.0) -> ndarray",
+    "log_return_performance(log_returns, risk_free_annual, annualization=252.0) -> dict",
+    "down_and_out_call_price(spot, strike, barrier, maturity, rate, volatility, dividend_yield=0.0) -> float",
+    "central_price_delta(price_fn, spot, relative_step=0.01) -> float",
     "ols_with_intercept(x, y) -> dict",
     "fit_ou_euler(values, dt) -> dict",
     "fit_ou_exact_ar1(values, dt) -> dict",
@@ -41,6 +47,12 @@ __all__ = [
     "black_scholes_price",
     "black_scholes_greeks",
     "historical_log_return_calibration",
+    "discount_cashflow",
+    "sma_seeded_ema",
+    "ewma_annualized_volatility",
+    "log_return_performance",
+    "down_and_out_call_price",
+    "central_price_delta",
     "ols_with_intercept",
     "fit_ou_euler",
     "fit_ou_exact_ar1",
@@ -196,6 +208,392 @@ def historical_log_return_calibration(
         "annualized_vol": float(sample_std * math.sqrt(ann)),
         "spot": float(prices[-1]),
     }
+
+
+
+def discount_cashflow(
+    amount: float,
+    rate: float,
+    maturity: float,
+) -> float:
+    return float(
+        float(amount)
+        * math.exp(
+            -float(rate)
+            * float(maturity)
+        )
+    )
+
+
+def sma_seeded_ema(
+    values: Sequence[float],
+    span: int,
+) -> np.ndarray:
+    x = np.asarray(
+        values,
+        dtype=float,
+    ).ravel()
+
+    if isinstance(span, bool):
+        raise ValueError(
+            "EMA span must be a positive integer."
+        )
+
+    n = int(span)
+
+    if (
+        n <= 0
+        or x.size < n
+        or not np.all(np.isfinite(x))
+    ):
+        raise ValueError(
+            "EMA requires finite values and a positive "
+            "span no larger than the series."
+        )
+
+    out = np.full(
+        x.shape,
+        np.nan,
+        dtype=float,
+    )
+
+    alpha = (
+        2.0
+        / (float(n) + 1.0)
+    )
+
+    out[n - 1] = float(
+        np.mean(x[:n])
+    )
+
+    for index in range(
+        n,
+        x.size,
+    ):
+        out[index] = (
+            alpha * x[index]
+            + (1.0 - alpha)
+            * out[index - 1]
+        )
+
+    return out
+
+
+def ewma_annualized_volatility(
+    log_returns: Sequence[float],
+    lookback: int,
+    annualization: float = 252.0,
+) -> np.ndarray:
+    returns = np.asarray(
+        log_returns,
+        dtype=float,
+    ).ravel()
+
+    if isinstance(lookback, bool):
+        raise ValueError(
+            "EWMA lookback must be a positive integer."
+        )
+
+    window = int(lookback)
+    annual = float(annualization)
+
+    if (
+        window <= 0
+        or annual <= 0.0
+        or returns.size == 0
+        or not np.all(np.isfinite(returns))
+    ):
+        raise ValueError(
+            "EWMA requires finite non-empty returns, "
+            "positive lookback and positive annualization."
+        )
+
+    alpha = (
+        2.0
+        / (float(window) + 1.0)
+    )
+
+    variance = np.empty_like(
+        returns,
+        dtype=float,
+    )
+
+    variance[0] = (
+        returns[0]
+        * returns[0]
+    )
+
+    for index in range(
+        1,
+        returns.size,
+    ):
+        variance[index] = (
+            alpha
+            * returns[index]
+            * returns[index]
+            + (1.0 - alpha)
+            * variance[index - 1]
+        )
+
+    return np.sqrt(
+        np.maximum(
+            variance,
+            0.0,
+        )
+        * annual
+    )
+
+
+def log_return_performance(
+    log_returns: Sequence[float],
+    risk_free_annual: float,
+    annualization: float = 252.0,
+) -> dict[str, float]:
+    returns = np.asarray(
+        log_returns,
+        dtype=float,
+    ).ravel()
+
+    returns = returns[
+        np.isfinite(returns)
+    ]
+
+    annual = float(
+        annualization
+    )
+
+    if (
+        returns.size == 0
+        or annual <= 0.0
+    ):
+        raise ValueError(
+            "Performance metrics require finite returns "
+            "and positive annualization."
+        )
+
+    mean_period = float(
+        np.mean(returns)
+    )
+
+    std_period = float(
+        np.std(
+            returns,
+            ddof=0,
+        )
+    )
+
+    annual_log_return = (
+        mean_period
+        * annual
+    )
+
+    annualized_return = float(
+        math.exp(
+            annual_log_return
+        )
+        - 1.0
+    )
+
+    annualized_volatility = float(
+        std_period
+        * math.sqrt(annual)
+    )
+
+    sharpe_ratio = (
+        (
+            annual_log_return
+            - float(risk_free_annual)
+        )
+        / annualized_volatility
+        if annualized_volatility > 0.0
+        else 0.0
+    )
+
+    wealth = np.exp(
+        np.cumsum(returns)
+    )
+
+    drawdown = (
+        wealth
+        / np.maximum.accumulate(
+            wealth
+        )
+        - 1.0
+    )
+
+    max_drawdown = float(
+        np.min(drawdown)
+    )
+
+    calmar_ratio = (
+        annualized_return
+        / abs(max_drawdown)
+        if max_drawdown < 0.0
+        else 0.0
+    )
+
+    return {
+        "annualized_return": annualized_return,
+        "annualized_volatility": annualized_volatility,
+        "sharpe_ratio": float(sharpe_ratio),
+        "max_drawdown": max_drawdown,
+        "calmar_ratio": float(calmar_ratio),
+    }
+
+
+def down_and_out_call_price(
+    spot: float,
+    strike: float,
+    barrier: float,
+    maturity: float,
+    rate: float,
+    volatility: float,
+    dividend_yield: float = 0.0,
+) -> float:
+    s = float(spot)
+    k = float(strike)
+    h = float(barrier)
+    t = float(maturity)
+    r = float(rate)
+    sigma = float(volatility)
+    q = float(dividend_yield)
+
+    if (
+        s <= h
+        or sigma <= 0.0
+        or t <= 0.0
+    ):
+        return 0.0
+
+    if (
+        s <= 0.0
+        or k <= 0.0
+        or h <= 0.0
+    ):
+        raise ValueError(
+            "Barrier option requires positive "
+            "spot, strike and barrier."
+        )
+
+    root_t = math.sqrt(t)
+
+    d1 = (
+        math.log(s / k)
+        + (
+            r
+            - q
+            + 0.5 * sigma * sigma
+        )
+        * t
+    ) / (
+        sigma
+        * root_t
+    )
+
+    d2 = (
+        d1
+        - sigma
+        * root_t
+    )
+
+    vanilla = (
+        s
+        * math.exp(-q * t)
+        * _normal_cdf(d1)
+        - k
+        * math.exp(-r * t)
+        * _normal_cdf(d2)
+    )
+
+    lam = (
+        r
+        - q
+        + 0.5 * sigma * sigma
+    ) / (
+        sigma
+        * sigma
+    )
+
+    ratio = h / s
+
+    d1_h = (
+        math.log(
+            h * h
+            / (s * k)
+        )
+        + (
+            r
+            - q
+            + 0.5 * sigma * sigma
+        )
+        * t
+    ) / (
+        sigma
+        * root_t
+    )
+
+    d2_h = (
+        d1_h
+        - sigma
+        * root_t
+    )
+
+    down_in = (
+        s
+        * math.exp(-q * t)
+        * ratio ** (2.0 * lam)
+        * _normal_cdf(d1_h)
+        - k
+        * math.exp(-r * t)
+        * ratio ** (
+            2.0 * lam
+            - 2.0
+        )
+        * _normal_cdf(d2_h)
+    )
+
+    return max(
+        float(
+            vanilla
+            - down_in
+        ),
+        0.0,
+    )
+
+
+def central_price_delta(
+    price_fn,
+    spot: float,
+    relative_step: float = 0.01,
+) -> float:
+    s = float(spot)
+    rel = float(relative_step)
+
+    if rel <= 0.0:
+        raise ValueError(
+            "relative_step must be positive."
+        )
+
+    step = max(
+        abs(s) * rel,
+        1e-8,
+    )
+
+    return float(
+        (
+            float(
+                price_fn(
+                    s + step
+                )
+            )
+            - float(
+                price_fn(
+                    s - step
+                )
+            )
+        )
+        / (2.0 * step)
+    )
 
 
 def ols_with_intercept(

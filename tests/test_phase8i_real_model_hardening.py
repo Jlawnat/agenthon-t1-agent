@@ -242,3 +242,327 @@ def test_snapshot_discovers_root_level_archive_and_tsv() -> None:
 
         assert "filing.zip" in names
         assert "holdings.tsv" in names
+
+
+def test_extended_candidate_finance_primitives_are_operational() -> None:
+    from agent.qf_primitives import (
+        central_price_delta,
+        discount_cashflow,
+        down_and_out_call_price,
+        ewma_annualized_volatility,
+        log_return_performance,
+        sma_seeded_ema,
+    )
+
+    bond = discount_cashflow(
+        1000.0,
+        0.0216,
+        0.25,
+    )
+    assert abs(
+        bond
+        - 994.6145537913911
+    ) < 1e-9
+
+    ema = sma_seeded_ema(
+        [1.0, 2.0, 3.0, 4.0],
+        3,
+    )
+    assert np.isnan(ema[0])
+    assert np.isnan(ema[1])
+    assert ema[2] == 2.0
+    assert ema[3] == 3.0
+
+    vol = ewma_annualized_volatility(
+        [0.01, -0.02, 0.015],
+        3,
+    )
+    assert vol.shape == (3,)
+    assert np.all(np.isfinite(vol))
+    assert np.all(vol >= 0.0)
+
+    performance = log_return_performance(
+        [0.01, -0.005, 0.012, 0.003],
+        risk_free_annual=0.02,
+    )
+    assert set(performance) == {
+        "annualized_return",
+        "annualized_volatility",
+        "sharpe_ratio",
+        "max_drawdown",
+        "calmar_ratio",
+    }
+
+    spot = 77.54975542623474
+    strike = 80.65
+    barrier = 54.28
+    maturity = 0.25
+    rate = 0.0216
+    sigma = 0.2586800935963609
+
+    price_fn = lambda s: down_and_out_call_price(
+        s,
+        strike,
+        barrier,
+        maturity,
+        rate,
+        sigma,
+    )
+
+    price = price_fn(spot)
+    delta = central_price_delta(
+        price_fn,
+        spot,
+        0.01,
+    )
+
+    assert abs(
+        price
+        - 2.8723811969778144
+    ) < 1e-10
+
+    assert abs(
+        delta
+        - 0.4220772133647326
+    ) < 1e-10
+
+    catalog_text = "\n".join(
+        PRIMITIVE_API_CATALOG
+    )
+
+    for name in (
+        "discount_cashflow",
+        "sma_seeded_ema",
+        "ewma_annualized_volatility",
+        "log_return_performance",
+        "down_and_out_call_price",
+        "central_price_delta",
+    ):
+        assert name in catalog_text
+
+
+def test_candidate_workspace_can_import_extended_finance_primitives() -> None:
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        task = _task(root)
+
+        workspace = CandidateWorkspace.create(
+            base_dir=root / "work",
+            candidate_id=77,
+            task_dir=task,
+        )
+
+        solver = (
+            workspace.source_dir
+            / "solver.py"
+        )
+
+        solver.write_text(
+            """
+import json
+from qf_primitives import (
+    discount_cashflow,
+    sma_seeded_ema,
+)
+
+payload = {
+    "pv": discount_cashflow(
+        1000.0,
+        0.05,
+        1.0,
+    ),
+    "ema": sma_seeded_ema(
+        [1.0, 2.0, 3.0, 4.0],
+        3,
+    ).tolist(),
+}
+
+print(json.dumps(payload))
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = run_candidate(
+            workspace,
+            solver,
+            timeout_seconds=5.0,
+        )
+
+        assert result.return_code == 0
+
+        payload = json.loads(
+            result.stdout
+        )
+
+        assert abs(
+            payload["pv"]
+            - 951.229424500714
+        ) < 1e-10
+
+        assert payload["ema"][2:] == [
+            2.0,
+            3.0,
+        ]
+
+
+def test_extended_candidate_finance_primitives_are_operational() -> None:
+    from agent.qf_primitives import (
+        central_price_delta,
+        discount_cashflow,
+        down_and_out_call_price,
+        ewma_annualized_volatility,
+        log_return_performance,
+        sma_seeded_ema,
+    )
+
+    bond = discount_cashflow(
+        1000.0,
+        0.0216,
+        0.25,
+    )
+    assert abs(
+        bond
+        - 994.6145537913911
+    ) < 1e-9
+
+    ema = sma_seeded_ema(
+        [1.0, 2.0, 3.0, 4.0],
+        3,
+    )
+    assert np.isnan(ema[0])
+    assert np.isnan(ema[1])
+    assert ema[2] == 2.0
+    assert ema[3] == 3.0
+
+    vol = ewma_annualized_volatility(
+        [0.01, -0.02, 0.015],
+        3,
+    )
+    assert vol.shape == (3,)
+    assert np.all(np.isfinite(vol))
+    assert np.all(vol >= 0.0)
+
+    performance = log_return_performance(
+        [0.01, -0.005, 0.012, 0.003],
+        risk_free_annual=0.02,
+    )
+    assert set(performance) == {
+        "annualized_return",
+        "annualized_volatility",
+        "sharpe_ratio",
+        "max_drawdown",
+        "calmar_ratio",
+    }
+
+    spot = 77.54975542623474
+    strike = 80.65
+    barrier = 54.28
+    maturity = 0.25
+    rate = 0.0216
+    sigma = 0.2586800935963609
+
+    price_fn = lambda s: down_and_out_call_price(
+        s,
+        strike,
+        barrier,
+        maturity,
+        rate,
+        sigma,
+    )
+
+    price = price_fn(spot)
+    delta = central_price_delta(
+        price_fn,
+        spot,
+        0.01,
+    )
+
+    assert abs(
+        price
+        - 2.8723811969778144
+    ) < 1e-10
+
+    assert abs(
+        delta
+        - 0.4220772133647326
+    ) < 1e-10
+
+    catalog_text = "\n".join(
+        PRIMITIVE_API_CATALOG
+    )
+
+    for name in (
+        "discount_cashflow",
+        "sma_seeded_ema",
+        "ewma_annualized_volatility",
+        "log_return_performance",
+        "down_and_out_call_price",
+        "central_price_delta",
+    ):
+        assert name in catalog_text
+
+
+def test_candidate_workspace_can_import_extended_finance_primitives() -> None:
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        task = _task(root)
+
+        workspace = CandidateWorkspace.create(
+            base_dir=root / "work",
+            candidate_id=77,
+            task_dir=task,
+        )
+
+        solver = (
+            workspace.source_dir
+            / "solver.py"
+        )
+
+        solver.write_text(
+            """
+import json
+from qf_primitives import (
+    discount_cashflow,
+    sma_seeded_ema,
+)
+
+payload = {
+    "pv": discount_cashflow(
+        1000.0,
+        0.05,
+        1.0,
+    ),
+    "ema": sma_seeded_ema(
+        [1.0, 2.0, 3.0, 4.0],
+        3,
+    ).tolist(),
+}
+
+print(json.dumps(payload))
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = run_candidate(
+            workspace,
+            solver,
+            timeout_seconds=5.0,
+        )
+
+        assert result.return_code == 0
+
+        payload = json.loads(
+            result.stdout
+        )
+
+        assert abs(
+            payload["pv"]
+            - 951.229424500714
+        ) < 1e-10
+
+        assert payload["ema"][2:] == [
+            2.0,
+            3.0,
+        ]
