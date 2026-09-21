@@ -880,13 +880,16 @@ def _checker_input_mount_args(
 ) -> list[str]:
     """Reproduce the task environment's data layout for public checkers.
 
-    QFBench units use both conventions:
+    QFBench units commonly use:
       COPY data/ /app/data/
-    and
+    or:
       COPY data/ /app/
 
-    Mount the source data at both locations so the checker sees the same
-    task inputs it would see in the task-specific environment image.
+    Some units also rename individual files, for example:
+      COPY data/stock_chars.pqt /app/data/stock_data.parquet
+
+    Preserve the broad compatibility mounts and recreate simple file-level
+    COPY aliases from the unit Dockerfile as read-only bind mounts.
     """
     data_dir = (
         unit_dir
@@ -897,21 +900,57 @@ def _checker_input_mount_args(
     if not data_dir.is_dir():
         return []
 
-    args = [
-        "-v",
-        f"{data_dir.resolve()}:/app/data:ro",
-    ]
+    args = []
 
     for child in sorted(
         data_dir.iterdir(),
         key=lambda x: x.name,
     ):
+        # Reproduce both common COPY layouts without bind-mounting
+        # /app/data itself.  Keeping the parent path unmounted allows
+        # Dockerfile-derived file aliases to coexist beneath /app/data.
         args.extend(
             [
+                "-v",
+                (
+                    f"{child.resolve()}:"
+                    f"/app/data/{child.name}:ro"
+                ),
                 "-v",
                 f"{child.resolve()}:/app/{child.name}:ro",
             ]
         )
+
+    dockerfile = (
+        unit_dir
+        / "environment"
+        / "Dockerfile"
+    )
+
+    if dockerfile.is_file():
+        for raw_line in dockerfile.read_text().splitlines():
+            parts = raw_line.strip().split()
+
+            if (
+                len(parts) == 3
+                and parts[0].upper() == "COPY"
+                and parts[1].startswith("data/")
+                and parts[2].startswith("/app/")
+            ):
+                source_rel = parts[1][len("data/"):]
+                source_path = data_dir / source_rel
+                container_path = parts[2]
+
+                if source_path.is_file():
+                    args.extend(
+                        [
+                            "-v",
+                            (
+                                f"{source_path.resolve()}:"
+                                f"{container_path}:ro"
+                            ),
+                        ]
+                    )
 
     return args
 
