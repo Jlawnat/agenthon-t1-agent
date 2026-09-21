@@ -181,7 +181,7 @@ def test_model_client_override_is_bounded_by_client_ceiling() -> None:
             max_output_tokens=8000,
         )
 
-    assert seen["payload"]["max_tokens"] == 6000
+    assert seen["payload"]["max_tokens"] == 4000
 
 
 def test_candidate_diversity_role_is_injected_even_for_planner_strategies() -> None:

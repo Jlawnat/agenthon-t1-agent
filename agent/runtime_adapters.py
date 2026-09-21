@@ -428,12 +428,12 @@ def build_runtime_components(
         ).lower()
 
         budget = {
-            "easy": 5000,
-            "medium": 6500,
-            "hard": 8000,
+            "easy": 3000,
+            "medium": 3600,
+            "hard": 4000,
         }.get(
             difficulty,
-            6500,
+            3600,
         )
 
         required_outputs = getattr(
@@ -452,7 +452,7 @@ def build_runtime_components(
         if output_count >= 5:
             budget = max(
                 budget,
-                7500,
+                4000,
             )
 
         return min(
@@ -742,7 +742,7 @@ def build_runtime_components(
             timeout_seconds=_model_timeout(
                 shared_run_context
             ),
-            max_output_tokens=8000,
+            max_output_tokens=4000,
         )
 
         return RepairedCandidate(

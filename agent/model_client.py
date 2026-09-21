@@ -14,7 +14,8 @@ from typing import Any
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_REQUEST_BYTES = 8 * 1024 * 1024
 DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-DEFAULT_MAX_OUTPUT_TOKENS = 8000
+HOUSE_MAX_OUTPUT_TOKENS = 4000
+DEFAULT_MAX_OUTPUT_TOKENS = HOUSE_MAX_OUTPUT_TOKENS
 MAX_ERROR_BODY_BYTES = 4096
 MAX_ENDPOINT_CHARS = 2048
 MAX_MODEL_NAME_CHARS = 256
@@ -82,9 +83,12 @@ class ModelClient:
             name="max_response_bytes",
         )
 
-        self.max_output_tokens = self._positive_integer(
-            max_output_tokens,
-            name="max_output_tokens",
+        self.max_output_tokens = min(
+            self._positive_integer(
+                max_output_tokens,
+                name="max_output_tokens",
+            ),
+            HOUSE_MAX_OUTPUT_TOKENS,
         )
 
         if self.endpoint is not None:
@@ -174,12 +178,10 @@ class ModelClient:
             "temperature": temperature_value,
             "max_tokens": effective_max_output_tokens,
             "chat_template_kwargs": {
-                # The approved Nemotron House model is a reasoning model.
-                # Use low-effort thinking to recover reasoning quality while
-                # conserving the fixed output-token budget for final code.
-                "enable_thinking": True,
-                "low_effort": True,
-                "force_nonempty_content": True,
+                # The Track-1 House report warns that default thinking can
+                # place reasoning in `content`, breaking structured/code
+                # consumers. Keep every response directly parseable.
+                "enable_thinking": False,
             },
         }
 
