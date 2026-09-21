@@ -248,6 +248,9 @@ from agent.offline_copula_sampling import (
 from agent.offline_cap_floor import (
     InterestRateCapFloorSkill,
 )
+from agent.offline_compound_poisson_fft import (
+    CompoundPoissonFftSkill,
+)
 
 from agent.offline_composite import (
     CompositeFinanceSkill,
@@ -1043,6 +1046,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     BarrierGarchVarSkill(),
     CopulaSamplingSkill(),
     InterestRateCapFloorSkill(),
+    CompoundPoissonFftSkill(),
     BlackScholesGreeksSkill(),
     BollingerBacktestSkill(),
     TimeSeriesStrategySkill(),
