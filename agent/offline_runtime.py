@@ -79,6 +79,9 @@ from agent.offline_cme_hdd import (
 from agent.offline_etf_overlap_redemption import (
     EtfOverlapRedemptionPressureSkill,
 )
+from agent.offline_etf_cross_asset_lead_lag import (
+    EtfCrossAssetLeadLagSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -1017,6 +1020,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     StableResidualSkill(),
     CmeHddOptionPricingSkill(),
     EtfOverlapRedemptionPressureSkill(),
+    EtfCrossAssetLeadLagSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
