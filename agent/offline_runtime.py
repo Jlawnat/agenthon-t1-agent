@@ -28,6 +28,15 @@ from agent.offline_lob_pc_signal import (
 from agent.offline_ou_jump import (
     OuJumpCommoditySkill,
 )
+from agent.offline_baw import (
+    BaroneAdesiWhaleySkill,
+)
+from agent.offline_geske import (
+    CompoundOptionGeskeSkill,
+)
+from agent.offline_kelly_var import (
+    KellyVarSizingSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -874,6 +883,9 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     FirstPassageTimeSkill(),
     LobPcSignalSkill(),
     OuJumpCommoditySkill(),
+    BaroneAdesiWhaleySkill(),
+    CompoundOptionGeskeSkill(),
+    KellyVarSizingSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
