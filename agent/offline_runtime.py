@@ -52,6 +52,9 @@ from agent.offline_sec_10k import (
 from agent.offline_regime_cta_vol_target import (
     RegimeCtaVolTargetSkill,
 )
+from agent.offline_merton_jump_diffusion import (
+    MertonJumpDiffusionSkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -981,6 +984,7 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     BlackLittermanRegimeHmmSkill(),
     Sec10KLongExtractionSkill(),
     RegimeCtaVolTargetSkill(),
+    MertonJumpDiffusionSkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
