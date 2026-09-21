@@ -19,6 +19,15 @@ from agent.offline_historical_var import (
 from agent.offline_double_sort import (
     DoubleSortCornerSkill,
 )
+from agent.offline_first_passage import (
+    FirstPassageTimeSkill,
+)
+from agent.offline_lob_pc_signal import (
+    LobPcSignalSkill,
+)
+from agent.offline_ou_jump import (
+    OuJumpCommoditySkill,
+)
 
 from agent.offline_time_series_strategy import (
     TimeSeriesStrategySkill,
@@ -862,6 +871,9 @@ def _copy_candidate_outputs(candidate_dir: Path, out_dir: Path) -> None:
 _SKILLS: tuple[OfflineSkill, ...] = (
     HistoricalVarDataPrepSkill(),
     DoubleSortCornerSkill(),
+    FirstPassageTimeSkill(),
+    LobPcSignalSkill(),
+    OuJumpCommoditySkill(),
     PolarsApiMigrationSkill(),
     CompositeFinanceSkill(),
     CopulaEquityFittingSkill(),
