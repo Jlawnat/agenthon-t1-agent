@@ -37,6 +37,8 @@ from agent.offline_geske import (
 from agent.offline_kelly_var import (
     KellyVarSizingSkill,
 )
+from agent.offline_bs_greeks_current import CurrentBlackScholesGreeksSkill
+from agent.offline_corporate_actions import CorporateActionAdjustmentSkill
 from agent.offline_cta_basel import (
     CtaBaselCapitalSkill,
 )
@@ -979,6 +981,16 @@ def _expected_output_files(instruction: str) -> set[str]:
         input_mentions - protected_outputs
     )
 
+    # Verifier-owned artifacts may be named explicitly in task instructions
+    # but must never be treated as participant deliverables.
+    expected.difference_update(
+        {
+            "reward.json",
+            "reward.txt",
+            "pytest_report.json",
+        }
+    )
+
     return expected
 def _candidate_output_complete(candidate_dir: Path, instruction: str) -> bool:
     expected = _expected_output_files(instruction)
@@ -1047,6 +1059,8 @@ _SKILLS: tuple[OfflineSkill, ...] = (
     CopulaSamplingSkill(),
     InterestRateCapFloorSkill(),
     CompoundPoissonFftSkill(),
+    CurrentBlackScholesGreeksSkill(),
+    CorporateActionAdjustmentSkill(),
     BlackScholesGreeksSkill(),
     BollingerBacktestSkill(),
     TimeSeriesStrategySkill(),
