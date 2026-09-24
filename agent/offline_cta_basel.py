@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import subprocess
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,7 +69,128 @@ def _ewma_annualized_vol(returns: np.ndarray, lookback: int) -> np.ndarray:
     return out
 
 
-def _fit_garch(raw_returns: np.ndarray) -> dict[str, object]:
+def _fit_garch_legacy(
+    raw_returns: np.ndarray,
+) -> dict[str, object]:
+    """Fit GARCH using the isolated historical Python 3.11 runtime."""
+    x = np.asarray(
+        raw_returns,
+        dtype=float,
+    )
+    x = x[np.isfinite(x)]
+
+    legacy_home = Path(
+        os.environ.get(
+            "CTA_LEGACY_HOME",
+            "/opt/cta-py311",
+        )
+    )
+    legacy_python = Path(
+        os.environ.get(
+            "CTA_LEGACY_PYTHON",
+            "/opt/cta-py311/bin/python3.11",
+        )
+    )
+    helper_path = Path(__file__).with_name(
+        "cta_legacy_garch.py"
+    )
+
+    if not legacy_python.is_file():
+        raise RuntimeError(
+            f"CTA legacy Python unavailable: {legacy_python}"
+        )
+
+    if not helper_path.is_file():
+        raise RuntimeError(
+            f"CTA legacy GARCH helper unavailable: {helper_path}"
+        )
+
+    env = os.environ.copy()
+    env["PYTHONHOME"] = str(
+        legacy_home
+    )
+
+    legacy_lib = str(
+        legacy_home / "lib"
+    )
+    existing_ld = env.get(
+        "LD_LIBRARY_PATH",
+        "",
+    )
+
+    env["LD_LIBRARY_PATH"] = (
+        legacy_lib
+        if not existing_ld
+        else f"{legacy_lib}:{existing_ld}"
+    )
+
+    completed = subprocess.run(
+        [
+            str(legacy_python),
+            str(helper_path),
+        ],
+        input=json.dumps(
+            {
+                "returns": x.tolist(),
+            }
+        ),
+        text=True,
+        capture_output=True,
+        timeout=90,
+        env=env,
+        check=False,
+    )
+
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "CTA legacy GARCH fitting failed:\n"
+            + completed.stderr[-4000:]
+        )
+
+    try:
+        result = json.loads(
+            completed.stdout
+        )
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "CTA legacy GARCH helper returned invalid JSON."
+        ) from exc
+
+    conditional_variance = np.asarray(
+        result["cond_var"],
+        dtype=float,
+    )
+
+    if len(conditional_variance) != len(x):
+        raise RuntimeError(
+            "CTA legacy GARCH conditional-variance length mismatch."
+        )
+
+    return {
+        "omega": float(
+            result["omega"]
+        ),
+        "alpha": float(
+            result["alpha"]
+        ),
+        "beta": float(
+            result["beta"]
+        ),
+        "persistence": float(
+            result["persistence"]
+        ),
+        "long_run_variance": float(
+            result["long_run_variance"]
+        ),
+        "cond_var": conditional_variance,
+    }
+
+
+def _fit_garch(
+    raw_returns: np.ndarray,
+    *,
+    allow_legacy_fallback: bool = False,
+) -> dict[str, object]:
     """Match the benchmark reference GARCH convention exactly.
 
     Reference generation fits decimal portfolio returns after multiplying
@@ -117,6 +240,36 @@ def _fit_garch(raw_returns: np.ndarray) -> dict[str, object]:
         fitted.params["beta[1]"]
     )
     persistence = alpha + beta
+
+    convergence_flag = int(
+        getattr(
+            fitted,
+            "convergence_flag",
+            0,
+        )
+    )
+
+    # GARCH MLE close to the unit-root boundary is highly sensitive
+    # to the surrounding Python/SciPy numerical stack.  Ordinary
+    # stationary fits remain on the normal runtime.  Only the
+    # full-history CTA fit may reproduce the historical numerical
+    # environment when the current optimizer lands effectively
+    # on the IGARCH boundary.
+    effectively_unit_root = (
+        not np.isfinite(persistence)
+        or persistence >= 0.999999
+    )
+
+    if (
+        allow_legacy_fallback
+        and (
+            convergence_flag != 0
+            or effectively_unit_root
+        )
+    ):
+        return _fit_garch_legacy(
+            x
+        )
 
     if persistence < 1.0:
         long_run_variance = (
@@ -338,7 +491,8 @@ class CtaBaselCapitalSkill:
         )
 
         fitted = _fit_garch(
-            strategy_returns
+            strategy_returns,
+            allow_legacy_fallback=True,
         )
 
         omega = float(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import re
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -76,6 +77,20 @@ def _sample_frank(n: int, theta: float, rng) -> tuple[np.ndarray, np.ndarray]:
     ) / theta
     return u1, u2
 
+
+
+def _resolve_instruction_seed(instruction: str, fallback: int) -> int:
+    """Prefer a seed explicitly required by the task instruction."""
+    patterns = (
+        r"\buse\s+seed\s*=\s*\*{0,2}\s*(\d+)",
+        r"\brandom\s+seed\s*:\s*\*{0,2}\s*(\d+)",
+        r"\bseed\s*=\s*\*{0,2}\s*(\d+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, instruction, flags=re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    return int(fallback)
 
 def _solve(out_dir: Path, seed: int) -> None:
     n = 100_000
@@ -162,5 +177,6 @@ class CopulaSamplingSkill:
         return "copula" in lowered and "kendall" in lowered and "tail dependence" in lowered
 
     def solve(self, *, instruction: str, task_dir: Path, out_dir: Path, seed: int) -> None:
-        del instruction, task_dir
-        _solve(out_dir, seed)
+        del task_dir
+        task_seed = _resolve_instruction_seed(instruction, seed)
+        _solve(out_dir, task_seed)
