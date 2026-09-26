@@ -50,6 +50,9 @@ PRIMITIVE_API_CATALOG = (
     "pseudo_observations(values) -> ndarray",
     "sample_gaussian_copula(n, rho, rng) -> tuple[ndarray, ndarray]",
     "sample_student_t_copula(n, rho, degrees_of_freedom, rng) -> tuple[ndarray, ndarray]",
+    "fit_gpd_exceedances(excesses) -> dict",
+    "evt_var_es_from_gpd(probability, threshold, shape, scale, n_total, n_exceedances) -> dict",
+    "hill_tail_index(losses) -> float",
 )
 
 __all__ = [
@@ -85,6 +88,9 @@ __all__ = [
     "pseudo_observations",
     "sample_gaussian_copula",
     "sample_student_t_copula",
+    "fit_gpd_exceedances",
+    "evt_var_es_from_gpd",
+    "hill_tail_index",
 ]
 
 
@@ -2054,4 +2060,316 @@ def sample_student_t_copula(
             uniforms[:, 1],
             dtype=float,
         ),
+    )
+
+
+def fit_gpd_exceedances(
+    excesses: Sequence[float],
+) -> dict[str, object]:
+    """
+    Fit a Generalized Pareto distribution to non-negative threshold
+    exceedances with location fixed at zero.
+    """
+    from scipy import stats
+
+    values = np.asarray(
+        excesses,
+        dtype=float,
+    ).ravel()
+
+    if values.size < 3:
+        raise ValueError(
+            "GPD fitting requires at least 3 exceedances."
+        )
+
+    if not np.all(
+        np.isfinite(
+            values
+        )
+    ):
+        raise ValueError(
+            "excesses must contain only finite values."
+        )
+
+    if np.any(
+        values < 0.0
+    ):
+        raise ValueError(
+            "excesses must be non-negative."
+        )
+
+    shape, _location, scale = (
+        stats.genpareto.fit(
+            values,
+            floc=0.0,
+        )
+    )
+
+    shape_value = float(
+        shape
+    )
+
+    scale_value = float(
+        scale
+    )
+
+    if not (
+        math.isfinite(
+            shape_value
+        )
+        and math.isfinite(
+            scale_value
+        )
+        and scale_value > 0.0
+    ):
+        raise RuntimeError(
+            "GPD fit produced invalid parameters."
+        )
+
+    return {
+        "shape": (
+            shape_value
+        ),
+        "scale": (
+            scale_value
+        ),
+        "n_exceedances": int(
+            values.size
+        ),
+        "mean_excess": float(
+            np.mean(
+                values
+            )
+        ),
+    }
+
+
+def evt_var_es_from_gpd(
+    *,
+    probability: float,
+    threshold: float,
+    shape: float,
+    scale: float,
+    n_total: int,
+    n_exceedances: int,
+) -> dict[str, float]:
+    """
+    Compute POT/EVT VaR and expected shortfall from a fitted GPD tail.
+
+    The exceedance frequency is n_exceedances / n_total.
+    """
+    p = float(
+        probability
+    )
+
+    u = float(
+        threshold
+    )
+
+    xi = float(
+        shape
+    )
+
+    sigma = float(
+        scale
+    )
+
+    numeric_values = (
+        p,
+        u,
+        xi,
+        sigma,
+    )
+
+    if not all(
+        math.isfinite(value)
+        for value in numeric_values
+    ):
+        raise ValueError(
+            "EVT inputs must be finite."
+        )
+
+    if not (
+        0.0
+        < p
+        < 1.0
+    ):
+        raise ValueError(
+            "probability must lie strictly between 0 and 1."
+        )
+
+    if sigma <= 0.0:
+        raise ValueError(
+            "scale must be positive."
+        )
+
+    if (
+        isinstance(n_total, bool)
+        or not isinstance(n_total, int)
+        or n_total <= 0
+    ):
+        raise ValueError(
+            "n_total must be a positive integer."
+        )
+
+    if (
+        isinstance(n_exceedances, bool)
+        or not isinstance(n_exceedances, int)
+        or n_exceedances <= 0
+        or n_exceedances > n_total
+    ):
+        raise ValueError(
+            "n_exceedances must be a positive integer "
+            "not exceeding n_total."
+        )
+
+    tail_probability = (
+        float(
+            n_total
+        )
+        / float(
+            n_exceedances
+        )
+        * (
+            1.0
+            - p
+        )
+    )
+
+    if tail_probability <= 0.0:
+        raise ValueError(
+            "Invalid POT tail probability."
+        )
+
+    if abs(
+        xi
+    ) < 1e-10:
+        var = (
+            u
+            - sigma
+            * math.log(
+                tail_probability
+            )
+        )
+    else:
+        var = (
+            u
+            + sigma
+            / xi
+            * (
+                tail_probability
+                ** (
+                    -xi
+                )
+                - 1.0
+            )
+        )
+
+    if xi >= 1.0:
+        raise ValueError(
+            "GPD expected shortfall is infinite for shape >= 1."
+        )
+
+    expected_shortfall = (
+        var
+        / (
+            1.0
+            - xi
+        )
+        + (
+            sigma
+            - xi
+            * u
+        )
+        / (
+            1.0
+            - xi
+        )
+    )
+
+    return {
+        "var": float(
+            var
+        ),
+        "expected_shortfall": float(
+            expected_shortfall
+        ),
+    }
+
+
+def hill_tail_index(
+    losses: Sequence[float],
+) -> float:
+    """
+    Estimate an upper-tail index using the Hill estimator.
+
+    The number of upper order statistics is floor(sqrt(n)), matching the
+    existing Phase 8R convention.
+    """
+    values = np.asarray(
+        losses,
+        dtype=float,
+    ).ravel()
+
+    if values.size == 0:
+        raise ValueError(
+            "losses must not be empty."
+        )
+
+    if not np.all(
+        np.isfinite(
+            values
+        )
+    ):
+        raise ValueError(
+            "losses must contain only finite values."
+        )
+
+    ordered = np.sort(
+        values
+    )[::-1]
+
+    n = int(
+        ordered.size
+    )
+
+    k = int(
+        math.floor(
+            math.sqrt(
+                n
+            )
+        )
+    )
+
+    if (
+        k < 1
+        or k >= n
+        or ordered[k] <= 0.0
+    ):
+        raise ValueError(
+            "Hill estimator requires positive upper-tail observations."
+        )
+
+    top = ordered[
+        :k
+    ]
+
+    if np.any(
+        top <= 0.0
+    ):
+        raise ValueError(
+            "Hill estimator upper-tail observations must be positive."
+        )
+
+    return float(
+        np.mean(
+            np.log(
+                top
+            )
+        )
+        - math.log(
+            float(
+                ordered[k]
+            )
+        )
     )
