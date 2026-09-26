@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
-import tempfile
 from pathlib import Path
 
 from agent.model_client import ModelClient
@@ -147,65 +145,10 @@ def solve(
         )
         return
 
-    # Hybrid generalization path:
-    #
-    # 1. Prefer the deterministic library when it can satisfy the complete
-    #    output contract.
-    # 2. If no deterministic skill can complete the task, fall through to
-    #    the generic model-driven planner/generator/validator/repair loop.
-    #
-    # The deterministic probe writes into an isolated temporary directory so
-    # a failed or incomplete attempt cannot contaminate final output.
-    with tempfile.TemporaryDirectory(
-        prefix="offline-probe-",
-        dir=str(work_root),
-    ) as temporary:
-        probe_output = Path(temporary) / "output"
-
-        try:
-            solve_offline(
-                task_dir=task_dir,
-                out_dir=probe_output,
-                seed=seed,
-            )
-        except Exception:
-            # An unfamiliar domain is expected to reach this path.
-            pass
-        else:
-            if not probe_output.is_dir():
-                raise RuntimeError(
-                    "Offline solver reported success without an output directory."
-                )
-
-            if out_dir.exists():
-                if out_dir.is_dir():
-                    # Preserve the output directory itself. On the competition
-                    # platform it may be a Docker bind-mount root such as
-                    # /app/output, which cannot be removed with rmtree().
-                    for child in out_dir.iterdir():
-                        if child.is_dir() and not child.is_symlink():
-                            shutil.rmtree(child)
-                        else:
-                            child.unlink()
-                else:
-                    out_dir.unlink()
-
-            out_dir.mkdir(parents=True, exist_ok=True)
-
-            # Copy children rather than the directory root itself.
-            # A Docker bind-mount root may reject metadata changes.
-            for source in probe_output.iterdir():
-                target = out_dir / source.name
-                if source.is_dir() and not source.is_symlink():
-                    shutil.copytree(source, target)
-                else:
-                    shutil.copy2(
-                        source,
-                        target,
-                        follow_symlinks=False,
-                    )
-            return
-
+    # Competition model mode must be solved through the House-model
+    # runtime. Deterministic/offline task solvers are intentionally
+    # unavailable on this path; reusable quantitative primitives remain
+    # available to model-generated solutions through the runtime.
     model_client = ModelClient()
 
     (

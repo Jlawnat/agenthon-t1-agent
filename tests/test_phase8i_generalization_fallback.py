@@ -124,205 +124,30 @@ def _configure_model_environment(
     )
 
 
-def test_model_mode_prefers_complete_offline_solution(
+def test_model_mode_uses_house_runtime_even_if_offline_skill_exists(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     task = _make_task(tmp_path)
     output = tmp_path / "output"
+
     _configure_model_environment(
         monkeypatch,
         tmp_path,
     )
 
-    def fake_offline(
-        *,
-        task_dir: Path,
-        out_dir: Path,
-        seed: int,
-    ) -> str:
-        assert task_dir == task.resolve()
-        assert seed == 42
-        out_dir.mkdir(
-            parents=True,
-            exist_ok=True,
+    offline_calls = {"count": 0}
+
+    def fake_offline(**kwargs):
+        offline_calls["count"] += 1
+        raise AssertionError(
+            "model mode must not invoke solve_offline"
         )
-        (out_dir / "answer.json").write_text(
-            '{"ok": true}\n',
-            encoding="utf-8",
-        )
-        return "generic-deterministic-skill"
 
     monkeypatch.setattr(
         main_module,
         "solve_offline",
         fake_offline,
-    )
-
-    def should_not_build_model(*args, **kwargs):
-        raise AssertionError(
-            "model runtime should not be entered"
-        )
-
-    monkeypatch.setattr(
-        main_module,
-        "build_runtime_components",
-        should_not_build_model,
-    )
-
-    main_module.solve(
-        task,
-        output,
-    )
-
-    assert (
-        output
-        / "answer.json"
-    ).is_file()
-
-
-
-def test_model_mode_preserves_existing_output_root(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    task = _make_task(tmp_path)
-    output = tmp_path / "output"
-    output.mkdir()
-
-    stale_file = output / "stale.txt"
-    stale_file.write_text(
-        "stale\n",
-        encoding="utf-8",
-    )
-    stale_dir = output / "stale-dir"
-    stale_dir.mkdir()
-    (stale_dir / "old.txt").write_text(
-        "old\n",
-        encoding="utf-8",
-    )
-
-    output_inode = output.stat().st_ino
-
-    _configure_model_environment(
-        monkeypatch,
-        tmp_path,
-    )
-
-    def fake_offline(
-        *,
-        task_dir: Path,
-        out_dir: Path,
-        seed: int,
-    ) -> str:
-        assert task_dir == task.resolve()
-        assert seed == 42
-
-        out_dir.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-        (out_dir / "answer.json").write_text(
-            '{"ok": true}\n',
-            encoding="utf-8",
-        )
-        nested = out_dir / "nested"
-        nested.mkdir()
-        (nested / "result.txt").write_text(
-            "new\n",
-            encoding="utf-8",
-        )
-        return "generic-deterministic-skill"
-
-    monkeypatch.setattr(
-        main_module,
-        "solve_offline",
-        fake_offline,
-    )
-
-    def should_not_build_model(*args, **kwargs):
-        raise AssertionError(
-            "model runtime should not be entered"
-        )
-
-    monkeypatch.setattr(
-        main_module,
-        "build_runtime_components",
-        should_not_build_model,
-    )
-
-    original_rmtree = main_module.shutil.rmtree
-    rmtree_calls = []
-
-    def guarded_rmtree(path, *args, **kwargs):
-        resolved = Path(path).resolve()
-        rmtree_calls.append(resolved)
-
-        if resolved == output.resolve():
-            raise AssertionError(
-                "final output root must never be removed"
-            )
-
-        return original_rmtree(
-            path,
-            *args,
-            **kwargs,
-        )
-
-    monkeypatch.setattr(
-        main_module.shutil,
-        "rmtree",
-        guarded_rmtree,
-    )
-
-    main_module.solve(
-        task,
-        output,
-    )
-
-    assert output.is_dir()
-    assert output.stat().st_ino == output_inode
-
-    assert not stale_file.exists()
-    assert not stale_dir.exists()
-
-    assert (
-        output
-        / "answer.json"
-    ).read_text(
-        encoding="utf-8",
-    ) == '{"ok": true}\n'
-
-    assert (
-        output
-        / "nested"
-        / "result.txt"
-    ).read_text(
-        encoding="utf-8",
-    ) == "new\n"
-
-    assert output.resolve() not in rmtree_calls
-
-def test_model_mode_falls_back_after_offline_miss(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    task = _make_task(tmp_path)
-    output = tmp_path / "output"
-    _configure_model_environment(
-        monkeypatch,
-        tmp_path,
-    )
-
-    def miss_offline(**kwargs):
-        raise RuntimeError(
-            "no deterministic skill"
-        )
-
-    monkeypatch.setattr(
-        main_module,
-        "solve_offline",
-        miss_offline,
     )
 
     monkeypatch.setattr(
@@ -351,18 +176,149 @@ def test_model_mode_falls_back_after_offline_miss(
         output,
     )
 
-    assert called[
-        "task_dir"
-    ] == task.resolve()
-    assert called[
-        "final_output_dir"
-    ] == output.resolve()
-    assert called[
-        "front_half_dependencies"
-    ] == "front"
-    assert called[
-        "generator"
-    ] == "generator"
-    assert called[
-        "repairer"
-    ] == "repairer"
+    assert offline_calls["count"] == 0
+
+    assert called["task_dir"] == task.resolve()
+    assert called["final_output_dir"] == output.resolve()
+    assert called["front_half_dependencies"] == "front"
+    assert called["generator"] == "generator"
+    assert called["repairer"] == "repairer"
+
+
+def test_model_mode_hands_existing_output_root_to_house_runtime_unchanged(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    task = _make_task(tmp_path)
+
+    output = tmp_path / "output"
+    output.mkdir()
+
+    stale_file = output / "stale.txt"
+    stale_file.write_text(
+        "stale\n",
+        encoding="utf-8",
+    )
+
+    output_inode = output.stat().st_ino
+
+    _configure_model_environment(
+        monkeypatch,
+        tmp_path,
+    )
+
+    offline_calls = {"count": 0}
+
+    def fake_offline(**kwargs):
+        offline_calls["count"] += 1
+        raise AssertionError(
+            "model mode must not invoke solve_offline"
+        )
+
+    monkeypatch.setattr(
+        main_module,
+        "solve_offline",
+        fake_offline,
+    )
+
+    monkeypatch.setattr(
+        main_module,
+        "build_runtime_components",
+        lambda model_client: (
+            "front",
+            "generator",
+            "repairer",
+        ),
+    )
+
+    called = {}
+
+    def fake_solve_task(**kwargs):
+        # main.py must not remove, replace, or clean the bind-mount-style
+        # output root before handing control to the House runtime.
+        assert output.is_dir()
+        assert output.stat().st_ino == output_inode
+        assert stale_file.read_text(
+            encoding="utf-8",
+        ) == "stale\n"
+
+        called.update(kwargs)
+
+    monkeypatch.setattr(
+        main_module,
+        "solve_task",
+        fake_solve_task,
+    )
+
+    main_module.solve(
+        task,
+        output,
+    )
+
+    assert offline_calls["count"] == 0
+
+    assert called["final_output_dir"] == output.resolve()
+
+    assert output.is_dir()
+    assert output.stat().st_ino == output_inode
+    assert stale_file.is_file()
+
+
+def test_model_mode_enters_house_runtime_directly(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    task = _make_task(tmp_path)
+    output = tmp_path / "output"
+
+    _configure_model_environment(
+        monkeypatch,
+        tmp_path,
+    )
+
+    offline_calls = {"count": 0}
+
+    def fake_offline(**kwargs):
+        offline_calls["count"] += 1
+        raise AssertionError(
+            "model mode must not invoke solve_offline"
+        )
+
+    monkeypatch.setattr(
+        main_module,
+        "solve_offline",
+        fake_offline,
+    )
+
+    monkeypatch.setattr(
+        main_module,
+        "build_runtime_components",
+        lambda model_client: (
+            "front",
+            "generator",
+            "repairer",
+        ),
+    )
+
+    called = {}
+
+    def fake_solve_task(**kwargs):
+        called.update(kwargs)
+
+    monkeypatch.setattr(
+        main_module,
+        "solve_task",
+        fake_solve_task,
+    )
+
+    main_module.solve(
+        task,
+        output,
+    )
+
+    assert offline_calls["count"] == 0
+    assert called["task_dir"] == task.resolve()
+    assert called["final_output_dir"] == output.resolve()
+    assert called["front_half_dependencies"] == "front"
+    assert called["generator"] == "generator"
+    assert called["repairer"] == "repairer"
