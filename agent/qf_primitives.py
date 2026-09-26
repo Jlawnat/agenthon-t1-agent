@@ -47,6 +47,9 @@ PRIMITIVE_API_CATALOG = (
     "continuous_zero_rate_from_discount_factor(discount_factor, maturity) -> float",
     "log_linear_discount_factor(pillars, maturity) -> float",
     "bootstrap_annual_par_discount_factors(par_yields) -> dict",
+    "pseudo_observations(values) -> ndarray",
+    "sample_gaussian_copula(n, rho, rng) -> tuple[ndarray, ndarray]",
+    "sample_student_t_copula(n, rho, degrees_of_freedom, rng) -> tuple[ndarray, ndarray]",
 )
 
 __all__ = [
@@ -79,6 +82,9 @@ __all__ = [
     "continuous_zero_rate_from_discount_factor",
     "log_linear_discount_factor",
     "bootstrap_annual_par_discount_factors",
+    "pseudo_observations",
+    "sample_gaussian_copula",
+    "sample_student_t_copula",
 ]
 
 
@@ -1836,3 +1842,216 @@ def bootstrap_annual_par_discount_factors(
             forward_rates
         ),
     }
+
+
+def pseudo_observations(
+    values: Sequence[float],
+) -> np.ndarray:
+    """
+    Convert a one-dimensional sample to rank-based pseudo-observations.
+
+    Average ranks are used for ties and divided by n + 1 so every
+    pseudo-observation lies strictly inside the unit interval.
+    """
+    from scipy import stats
+
+    sample = np.asarray(
+        values,
+        dtype=float,
+    ).ravel()
+
+    if sample.size == 0:
+        raise ValueError(
+            "values must not be empty."
+        )
+
+    if not np.all(
+        np.isfinite(
+            sample
+        )
+    ):
+        raise ValueError(
+            "values must contain only finite observations."
+        )
+
+    return np.asarray(
+        stats.rankdata(
+            sample
+        )
+        / (
+            sample.size
+            + 1.0
+        ),
+        dtype=float,
+    )
+
+
+def sample_gaussian_copula(
+    *,
+    n: int,
+    rho: float,
+    rng,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+]:
+    """
+    Draw bivariate Gaussian-copula pseudo-uniform samples.
+
+    The supplied random generator controls reproducibility.
+    """
+    from scipy import stats
+
+    if (
+        isinstance(n, bool)
+        or not isinstance(n, int)
+        or n <= 0
+    ):
+        raise ValueError(
+            "n must be a positive integer."
+        )
+
+    correlation = float(
+        rho
+    )
+
+    if not math.isfinite(
+        correlation
+    ):
+        raise ValueError(
+            "rho must be finite."
+        )
+
+    if not (
+        -1.0
+        <= correlation
+        <= 1.0
+    ):
+        raise ValueError(
+            "rho must lie between -1 and 1."
+        )
+
+    z = rng.multivariate_normal(
+        [0.0, 0.0],
+        [
+            [1.0, correlation],
+            [correlation, 1.0],
+        ],
+        n,
+    )
+
+    uniforms = stats.norm.cdf(
+        z
+    )
+
+    return (
+        np.asarray(
+            uniforms[:, 0],
+            dtype=float,
+        ),
+        np.asarray(
+            uniforms[:, 1],
+            dtype=float,
+        ),
+    )
+
+
+def sample_student_t_copula(
+    *,
+    n: int,
+    rho: float,
+    degrees_of_freedom: int,
+    rng,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+]:
+    """
+    Draw bivariate Student-t copula pseudo-uniform samples.
+
+    Correlated standard-normal draws are scaled by one common chi-square
+    variate per observation before applying the Student-t CDF.
+    """
+    from scipy import stats
+
+    if (
+        isinstance(n, bool)
+        or not isinstance(n, int)
+        or n <= 0
+    ):
+        raise ValueError(
+            "n must be a positive integer."
+        )
+
+    correlation = float(
+        rho
+    )
+
+    if not math.isfinite(
+        correlation
+    ):
+        raise ValueError(
+            "rho must be finite."
+        )
+
+    if not (
+        -1.0
+        <= correlation
+        <= 1.0
+    ):
+        raise ValueError(
+            "rho must lie between -1 and 1."
+        )
+
+    if (
+        isinstance(
+            degrees_of_freedom,
+            bool,
+        )
+        or not isinstance(
+            degrees_of_freedom,
+            int,
+        )
+        or degrees_of_freedom <= 0
+    ):
+        raise ValueError(
+            "degrees_of_freedom must be a positive integer."
+        )
+
+    z = rng.multivariate_normal(
+        [0.0, 0.0],
+        [
+            [1.0, correlation],
+            [correlation, 1.0],
+        ],
+        n,
+    )
+
+    chi2 = rng.chisquare(
+        degrees_of_freedom,
+        n,
+    )
+
+    t_values = (
+        z
+        * np.sqrt(
+            degrees_of_freedom
+            / chi2
+        )[:, None]
+    )
+
+    uniforms = stats.t.cdf(
+        t_values,
+        degrees_of_freedom,
+    )
+
+    return (
+        np.asarray(
+            uniforms[:, 0],
+            dtype=float,
+        ),
+        np.asarray(
+            uniforms[:, 1],
+            dtype=float,
+        ),
+    )
