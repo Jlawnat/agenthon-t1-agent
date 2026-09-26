@@ -43,6 +43,10 @@ PRIMITIVE_API_CATALOG = (
     "fit_garch11_zero_mean(returns, min_observations=50) -> dict",
     "garch11_forecast_variance(omega, alpha, beta, last_return, last_variance, horizon) -> dict",
     "implied_volatility_black_scholes(market_price, spot, strike, rate, dividend_yield, maturity, option_type, upper_volatility=5.0) -> float",
+    "discount_factor_from_continuous_zero_rate(zero_rate, maturity) -> float",
+    "continuous_zero_rate_from_discount_factor(discount_factor, maturity) -> float",
+    "log_linear_discount_factor(pillars, maturity) -> float",
+    "bootstrap_annual_par_discount_factors(par_yields) -> dict",
 )
 
 __all__ = [
@@ -71,6 +75,10 @@ __all__ = [
     "fit_garch11_zero_mean",
     "garch11_forecast_variance",
     "implied_volatility_black_scholes",
+    "discount_factor_from_continuous_zero_rate",
+    "continuous_zero_rate_from_discount_factor",
+    "log_linear_discount_factor",
+    "bootstrap_annual_par_discount_factors",
 ]
 
 
@@ -1462,3 +1470,369 @@ def implied_volatility_black_scholes(
     return float(
         midpoint
     )
+
+
+def discount_factor_from_continuous_zero_rate(
+    *,
+    zero_rate: float,
+    maturity: float,
+) -> float:
+    """
+    Convert a continuously compounded zero rate into a discount factor.
+    """
+    rate = float(
+        zero_rate
+    )
+    time = float(
+        maturity
+    )
+
+    if not (
+        math.isfinite(rate)
+        and math.isfinite(time)
+    ):
+        raise ValueError(
+            "zero_rate and maturity must be finite."
+        )
+
+    if time < 0.0:
+        raise ValueError(
+            "maturity must be non-negative."
+        )
+
+    if time == 0.0:
+        return 1.0
+
+    return float(
+        math.exp(
+            -rate * time
+        )
+    )
+
+
+def continuous_zero_rate_from_discount_factor(
+    *,
+    discount_factor: float,
+    maturity: float,
+) -> float:
+    """
+    Convert a positive discount factor into a continuously compounded
+    zero rate.
+    """
+    discount = float(
+        discount_factor
+    )
+    time = float(
+        maturity
+    )
+
+    if not (
+        math.isfinite(discount)
+        and math.isfinite(time)
+    ):
+        raise ValueError(
+            "discount_factor and maturity must be finite."
+        )
+
+    if discount <= 0.0:
+        raise ValueError(
+            "discount_factor must be positive."
+        )
+
+    if time <= 0.0:
+        raise ValueError(
+            "maturity must be positive."
+        )
+
+    return float(
+        -math.log(
+            discount
+        )
+        / time
+    )
+
+
+def log_linear_discount_factor(
+    *,
+    pillars: Sequence[
+        tuple[
+            float,
+            float,
+        ]
+    ],
+    maturity: float,
+) -> float:
+    """
+    Interpolate discount factors linearly in log-discount space.
+
+    Inside the pillar range, log discount factors are linearly interpolated.
+    Outside the pillar range, the zero rate of the nearest endpoint is held
+    constant.
+    """
+    target = float(
+        maturity
+    )
+
+    if not math.isfinite(
+        target
+    ):
+        raise ValueError(
+            "maturity must be finite."
+        )
+
+    if target <= 0.0:
+        return 1.0
+
+    if not pillars:
+        raise ValueError(
+            "pillars must not be empty."
+        )
+
+    ordered = sorted(
+        (
+            float(time),
+            float(discount),
+        )
+        for time, discount
+        in pillars
+    )
+
+    previous_time = None
+
+    for time, discount in ordered:
+        if not (
+            math.isfinite(time)
+            and math.isfinite(discount)
+        ):
+            raise ValueError(
+                "curve pillars must be finite."
+            )
+
+        if time <= 0.0:
+            raise ValueError(
+                "pillar maturities must be positive."
+            )
+
+        if discount <= 0.0:
+            raise ValueError(
+                "pillar discount factors must be positive."
+            )
+
+        if (
+            previous_time is not None
+            and time <= previous_time
+        ):
+            raise ValueError(
+                "pillar maturities must be unique."
+            )
+
+        previous_time = time
+
+    first_time, first_discount = (
+        ordered[0]
+    )
+
+    if target <= first_time:
+        zero_rate = (
+            -math.log(
+                first_discount
+            )
+            / first_time
+        )
+
+        return float(
+            math.exp(
+                -zero_rate
+                * target
+            )
+        )
+
+    last_time, last_discount = (
+        ordered[-1]
+    )
+
+    if target >= last_time:
+        zero_rate = (
+            -math.log(
+                last_discount
+            )
+            / last_time
+        )
+
+        return float(
+            math.exp(
+                -zero_rate
+                * target
+            )
+        )
+
+    for index in range(
+        1,
+        len(ordered),
+    ):
+        t0, d0 = (
+            ordered[
+                index - 1
+            ]
+        )
+
+        t1, d1 = (
+            ordered[index]
+        )
+
+        if (
+            t0
+            <= target
+            <= t1
+        ):
+            weight = (
+                target
+                - t0
+            ) / (
+                t1
+                - t0
+            )
+
+            return float(
+                math.exp(
+                    (
+                        1.0
+                        - weight
+                    )
+                    * math.log(
+                        d0
+                    )
+                    + weight
+                    * math.log(
+                        d1
+                    )
+                )
+            )
+
+    raise RuntimeError(
+        "Curve interpolation failed."
+    )
+
+
+def bootstrap_annual_par_discount_factors(
+    par_yields: Sequence[
+        float
+    ],
+) -> dict[str, object]:
+    """
+    Bootstrap discount factors from consecutive annual par yields.
+
+    The input sequence represents annual-coupon par yields for maturities
+    1, 2, ..., N years. Coupon frequency is annual and par value is 1.
+
+    Returns discount factors, continuously compounded zero rates, and
+    one-year continuously compounded forward rates.
+    """
+    yields = np.asarray(
+        par_yields,
+        dtype=float,
+    ).ravel()
+
+    if yields.size == 0:
+        raise ValueError(
+            "par_yields must not be empty."
+        )
+
+    if not np.all(
+        np.isfinite(
+            yields
+        )
+    ):
+        raise ValueError(
+            "par_yields must contain only finite values."
+        )
+
+    discounts = np.empty(
+        yields.size,
+        dtype=float,
+    )
+
+    previous_sum = 0.0
+
+    for index, par_yield in enumerate(
+        yields
+    ):
+        discount = (
+            1.0
+            - float(
+                par_yield
+            )
+            * previous_sum
+        ) / (
+            1.0
+            + float(
+                par_yield
+            )
+        )
+
+        if not (
+            math.isfinite(
+                discount
+            )
+            and 0.0
+            < discount
+            < 1.0
+        ):
+            raise ValueError(
+                "par yields imply an invalid discount factor."
+            )
+
+        discounts[
+            index
+        ] = discount
+
+        previous_sum += discount
+
+    maturities = np.arange(
+        1,
+        yields.size + 1,
+        dtype=float,
+    )
+
+    zero_rates = (
+        -np.log(
+            discounts
+        )
+        / maturities
+    )
+
+    forward_rates = np.empty(
+        yields.size,
+        dtype=float,
+    )
+
+    forward_rates[0] = (
+        -math.log(
+            float(
+                discounts[0]
+            )
+        )
+    )
+
+    if yields.size > 1:
+        forward_rates[1:] = (
+            -np.log(
+                discounts[1:]
+                / discounts[:-1]
+            )
+        )
+
+    return {
+        "maturities": (
+            maturities
+        ),
+        "discount_factors": (
+            discounts
+        ),
+        "zero_rates": (
+            zero_rates
+        ),
+        "forward_rates": (
+            forward_rates
+        ),
+    }
