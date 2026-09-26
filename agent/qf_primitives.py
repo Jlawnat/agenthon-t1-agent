@@ -42,6 +42,7 @@ PRIMITIVE_API_CATALOG = (
     "largest_remainder_allocate(total, weights) -> ndarray[int]",
     "fit_garch11_zero_mean(returns, min_observations=50) -> dict",
     "garch11_forecast_variance(omega, alpha, beta, last_return, last_variance, horizon) -> dict",
+    "implied_volatility_black_scholes(market_price, spot, strike, rate, dividend_yield, maturity, option_type, upper_volatility=5.0) -> float",
 )
 
 __all__ = [
@@ -69,6 +70,7 @@ __all__ = [
     "largest_remainder_allocate",
     "fit_garch11_zero_mean",
     "garch11_forecast_variance",
+    "implied_volatility_black_scholes",
 ]
 
 
@@ -1169,3 +1171,294 @@ def garch11_forecast_variance(
             persistence
         ),
     }
+
+
+def implied_volatility_black_scholes(
+    *,
+    market_price: float,
+    spot: float,
+    strike: float,
+    rate: float,
+    dividend_yield: float,
+    maturity: float,
+    option_type: str,
+    upper_volatility: float = 5.0,
+    price_tolerance: float = 1e-12,
+    volatility_tolerance: float = 1e-12,
+    max_iterations: int = 300,
+) -> float:
+    """
+    Recover Black-Scholes implied volatility by bounded root finding.
+
+    The market price must satisfy the no-arbitrage bounds for a European
+    call or put with continuous dividend yield. A price equal to the
+    zero-volatility lower bound returns 0.0.
+
+    The solver uses monotone bisection over volatility in
+    [0, upper_volatility].
+    """
+    market = float(
+        market_price
+    )
+    s = float(
+        spot
+    )
+    k = float(
+        strike
+    )
+    r = float(
+        rate
+    )
+    q = float(
+        dividend_yield
+    )
+    t = float(
+        maturity
+    )
+    upper_sigma = float(
+        upper_volatility
+    )
+    price_tol = float(
+        price_tolerance
+    )
+    vol_tol = float(
+        volatility_tolerance
+    )
+
+    values = (
+        market,
+        s,
+        k,
+        r,
+        q,
+        t,
+        upper_sigma,
+        price_tol,
+        vol_tol,
+    )
+
+    if not all(
+        math.isfinite(value)
+        for value in values
+    ):
+        raise ValueError(
+            "Implied-volatility inputs must be finite."
+        )
+
+    if s <= 0.0 or k <= 0.0:
+        raise ValueError(
+            "spot and strike must be positive."
+        )
+
+    if t <= 0.0:
+        raise ValueError(
+            "maturity must be positive."
+        )
+
+    if upper_sigma <= 0.0:
+        raise ValueError(
+            "upper_volatility must be positive."
+        )
+
+    if price_tol <= 0.0:
+        raise ValueError(
+            "price_tolerance must be positive."
+        )
+
+    if vol_tol <= 0.0:
+        raise ValueError(
+            "volatility_tolerance must be positive."
+        )
+
+    if (
+        isinstance(max_iterations, bool)
+        or not isinstance(
+            max_iterations,
+            int,
+        )
+        or max_iterations <= 0
+    ):
+        raise ValueError(
+            "max_iterations must be a positive integer."
+        )
+
+    kind = str(
+        option_type
+    ).strip().lower()
+
+    if kind not in {
+        "call",
+        "put",
+    }:
+        raise ValueError(
+            "option_type must be 'call' or 'put'."
+        )
+
+    discounted_spot = (
+        s
+        * math.exp(
+            -q * t
+        )
+    )
+
+    discounted_strike = (
+        k
+        * math.exp(
+            -r * t
+        )
+    )
+
+    if kind == "call":
+        lower_bound = max(
+            discounted_spot
+            - discounted_strike,
+            0.0,
+        )
+
+        upper_bound = (
+            discounted_spot
+        )
+
+    else:
+        lower_bound = max(
+            discounted_strike
+            - discounted_spot,
+            0.0,
+        )
+
+        upper_bound = (
+            discounted_strike
+        )
+
+    arbitrage_tolerance = max(
+        price_tol,
+        1e-12,
+    )
+
+    if (
+        market
+        < lower_bound
+        - arbitrage_tolerance
+        or market
+        > upper_bound
+        + arbitrage_tolerance
+    ):
+        raise ValueError(
+            "market_price violates Black-Scholes "
+            "no-arbitrage bounds."
+        )
+
+    if abs(
+        market
+        - lower_bound
+    ) <= price_tol:
+        return 0.0
+
+    def residual(
+        volatility: float,
+    ) -> float:
+        return (
+            black_scholes_price(
+                spot=s,
+                strike=k,
+                rate=r,
+                dividend_yield=q,
+                volatility=volatility,
+                maturity=t,
+                option_type=kind,
+            )
+            - market
+        )
+
+    low = 0.0
+    high = upper_sigma
+
+    low_value = residual(
+        low
+    )
+
+    high_value = residual(
+        high
+    )
+
+    if abs(
+        low_value
+    ) <= price_tol:
+        return 0.0
+
+    if abs(
+        high_value
+    ) <= price_tol:
+        return float(
+            high
+        )
+
+    if (
+        low_value > 0.0
+        or high_value < 0.0
+    ):
+        raise ValueError(
+            "Could not bracket Black-Scholes "
+            "implied volatility within the "
+            "requested volatility interval."
+        )
+
+    for _ in range(
+        max_iterations
+    ):
+        midpoint = (
+            0.5
+            * (
+                low
+                + high
+            )
+        )
+
+        midpoint_value = residual(
+            midpoint
+        )
+
+        if (
+            abs(
+                midpoint_value
+            )
+            <= price_tol
+            or (
+                high
+                - low
+            )
+            <= vol_tol
+        ):
+            return float(
+                midpoint
+            )
+
+        if midpoint_value > 0.0:
+            high = midpoint
+        else:
+            low = midpoint
+
+    midpoint = (
+        0.5
+        * (
+            low
+            + high
+        )
+    )
+
+    if abs(
+        residual(
+            midpoint
+        )
+    ) > max(
+        price_tol,
+        1e-10,
+    ):
+        raise RuntimeError(
+            "Black-Scholes implied-volatility "
+            "solver did not converge."
+        )
+
+    return float(
+        midpoint
+    )
