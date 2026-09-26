@@ -40,6 +40,8 @@ PRIMITIVE_API_CATALOG = (
     "normalize_nonnegative(values) -> ndarray",
     "ewma_weights(length, half_life, newest_first=True) -> ndarray",
     "largest_remainder_allocate(total, weights) -> ndarray[int]",
+    "fit_garch11_zero_mean(returns, min_observations=50) -> dict",
+    "garch11_forecast_variance(omega, alpha, beta, last_return, last_variance, horizon) -> dict",
 )
 
 __all__ = [
@@ -65,6 +67,8 @@ __all__ = [
     "normalize_nonnegative",
     "ewma_weights",
     "largest_remainder_allocate",
+    "fit_garch11_zero_mean",
+    "garch11_forecast_variance",
 ]
 
 
@@ -882,3 +886,286 @@ def largest_remainder_allocate(
         order = np.argsort(-fractions, kind="stable")
         base[order[:remainder]] += 1
     return base
+
+
+def fit_garch11_zero_mean(
+    returns: Sequence[float],
+    min_observations: int = 50,
+) -> dict[str, object]:
+    """
+    Fit a zero-mean Gaussian GARCH(1,1) model.
+
+    Input returns are expressed in decimal units, for example 0.01 for 1%.
+    Fitting is performed on percent-scaled returns for numerical stability.
+    Returned omega, conditional variances, and long-run variance are converted
+    back to decimal-return squared units.
+
+    Non-finite observations are removed before fitting.
+    """
+    if (
+        isinstance(min_observations, bool)
+        or not isinstance(min_observations, int)
+        or min_observations <= 0
+    ):
+        raise ValueError(
+            "min_observations must be a positive integer."
+        )
+
+    values = np.asarray(
+        returns,
+        dtype=float,
+    ).ravel()
+
+    values = values[
+        np.isfinite(values)
+    ]
+
+    if values.size < min_observations:
+        raise ValueError(
+            "GARCH fitting requires at least "
+            f"{min_observations} finite observations."
+        )
+
+    if np.all(values == values[0]):
+        raise ValueError(
+            "GARCH fitting requires non-constant returns."
+        )
+
+    try:
+        from arch import arch_model
+    except ImportError as exc:
+        raise RuntimeError(
+            "The arch package is required for GARCH fitting."
+        ) from exc
+
+    percent_returns = (
+        values
+        * 100.0
+    )
+
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter(
+            "ignore"
+        )
+
+        model = arch_model(
+            percent_returns,
+            mean="Zero",
+            vol="GARCH",
+            p=1,
+            q=1,
+            dist="Normal",
+            rescale=False,
+        )
+
+        fitted = model.fit(
+            update_freq=0,
+            disp="off",
+            show_warning=False,
+        )
+
+    omega = (
+        float(
+            fitted.params["omega"]
+        )
+        / 10000.0
+    )
+
+    alpha = float(
+        fitted.params["alpha[1]"]
+    )
+
+    beta = float(
+        fitted.params["beta[1]"]
+    )
+
+    persistence = (
+        alpha
+        + beta
+    )
+
+    if persistence < 1.0:
+        long_run_variance = (
+            omega
+            / (
+                1.0
+                - persistence
+            )
+        )
+    else:
+        long_run_variance = float(
+            np.var(
+                values,
+                ddof=1,
+            )
+        )
+
+    conditional_variance = (
+        np.asarray(
+            fitted.conditional_volatility,
+            dtype=float,
+        )
+        ** 2
+        / 10000.0
+    )
+
+    convergence_flag = int(
+        getattr(
+            fitted,
+            "convergence_flag",
+            0,
+        )
+    )
+
+    return {
+        "omega": float(
+            omega
+        ),
+        "alpha": float(
+            alpha
+        ),
+        "beta": float(
+            beta
+        ),
+        "persistence": float(
+            persistence
+        ),
+        "long_run_variance": float(
+            long_run_variance
+        ),
+        "conditional_variance": (
+            conditional_variance
+        ),
+        "convergence_flag": (
+            convergence_flag
+        ),
+        "n_observations": int(
+            values.size
+        ),
+    }
+
+
+def garch11_forecast_variance(
+    *,
+    omega: float,
+    alpha: float,
+    beta: float,
+    last_return: float,
+    last_variance: float,
+    horizon: int,
+) -> dict[str, object]:
+    """
+    Forecast GARCH(1,1) conditional variance for one or more future periods.
+
+    All variance quantities use the same squared-return units.
+    """
+    omega_value = float(
+        omega
+    )
+    alpha_value = float(
+        alpha
+    )
+    beta_value = float(
+        beta
+    )
+    last_return_value = float(
+        last_return
+    )
+    last_variance_value = float(
+        last_variance
+    )
+
+    if (
+        isinstance(horizon, bool)
+        or not isinstance(horizon, int)
+        or horizon <= 0
+    ):
+        raise ValueError(
+            "horizon must be a positive integer."
+        )
+
+    numeric_values = np.asarray(
+        [
+            omega_value,
+            alpha_value,
+            beta_value,
+            last_return_value,
+            last_variance_value,
+        ],
+        dtype=float,
+    )
+
+    if not np.all(
+        np.isfinite(
+            numeric_values
+        )
+    ):
+        raise ValueError(
+            "GARCH forecast inputs must be finite."
+        )
+
+    if omega_value < 0.0:
+        raise ValueError(
+            "omega must be non-negative."
+        )
+
+    if alpha_value < 0.0:
+        raise ValueError(
+            "alpha must be non-negative."
+        )
+
+    if beta_value < 0.0:
+        raise ValueError(
+            "beta must be non-negative."
+        )
+
+    if last_variance_value < 0.0:
+        raise ValueError(
+            "last_variance must be non-negative."
+        )
+
+    variance_path = np.empty(
+        horizon,
+        dtype=float,
+    )
+
+    variance_path[0] = (
+        omega_value
+        + alpha_value
+        * last_return_value ** 2
+        + beta_value
+        * last_variance_value
+    )
+
+    persistence = (
+        alpha_value
+        + beta_value
+    )
+
+    for step in range(
+        1,
+        horizon,
+    ):
+        variance_path[step] = (
+            omega_value
+            + persistence
+            * variance_path[
+                step - 1
+            ]
+        )
+
+    return {
+        "variance_path": (
+            variance_path
+        ),
+        "aggregate_variance": float(
+            np.sum(
+                variance_path
+            )
+        ),
+        "persistence": float(
+            persistence
+        ),
+    }
