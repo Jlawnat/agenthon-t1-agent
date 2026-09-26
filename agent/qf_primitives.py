@@ -53,6 +53,8 @@ PRIMITIVE_API_CATALOG = (
     "fit_gpd_exceedances(excesses) -> dict",
     "evt_var_es_from_gpd(probability, threshold, shape, scale, n_total, n_exceedances) -> dict",
     "hill_tail_index(losses) -> float",
+    "pca_from_observations(values, n_components) -> dict",
+    "pca_from_covariance(covariance, n_components=None) -> dict",
 )
 
 __all__ = [
@@ -91,6 +93,8 @@ __all__ = [
     "fit_gpd_exceedances",
     "evt_var_es_from_gpd",
     "hill_tail_index",
+    "pca_from_observations",
+    "pca_from_covariance",
 ]
 
 
@@ -2373,3 +2377,253 @@ def hill_tail_index(
             )
         )
     )
+
+
+def pca_from_observations(
+    values,
+    *,
+    n_components: int,
+) -> dict[str, object]:
+    """
+    Principal-components analysis of an observation matrix.
+
+    Rows are observations and columns are variables. The implementation
+    follows sklearn.decomposition.PCA so centering, component orientation,
+    explained variance, and transformed scores follow that contract.
+    """
+    from sklearn.decomposition import PCA
+
+    matrix = np.asarray(
+        values,
+        dtype=float,
+    )
+
+    if (
+        matrix.ndim != 2
+        or matrix.shape[0] == 0
+        or matrix.shape[1] == 0
+    ):
+        raise ValueError(
+            "values must be a non-empty two-dimensional matrix."
+        )
+
+    if not np.all(
+        np.isfinite(
+            matrix
+        )
+    ):
+        raise ValueError(
+            "values must contain only finite observations."
+        )
+
+    if (
+        isinstance(n_components, bool)
+        or not isinstance(n_components, int)
+        or n_components <= 0
+    ):
+        raise ValueError(
+            "n_components must be a positive integer."
+        )
+
+    max_components = min(
+        matrix.shape
+    )
+
+    if n_components > max_components:
+        raise ValueError(
+            "n_components cannot exceed "
+            "min(n_observations, n_features)."
+        )
+
+    model = PCA(
+        n_components=n_components
+    )
+
+    scores = model.fit_transform(
+        matrix
+    )
+
+    return {
+        "mean": np.asarray(
+            model.mean_,
+            dtype=float,
+        ),
+        "components": np.asarray(
+            model.components_,
+            dtype=float,
+        ),
+        "explained_variance": np.asarray(
+            model.explained_variance_,
+            dtype=float,
+        ),
+        "explained_variance_ratio": np.asarray(
+            model.explained_variance_ratio_,
+            dtype=float,
+        ),
+        "scores": np.asarray(
+            scores,
+            dtype=float,
+        ),
+    }
+
+
+def pca_from_covariance(
+    covariance,
+    *,
+    n_components: int | None = None,
+) -> dict[str, object]:
+    """
+    Principal-components decomposition of a covariance matrix.
+
+    Eigenvalues and eigenvectors are ordered from largest to smallest.
+    No sign convention is imposed on eigenvectors; orientation remains
+    the responsibility of task-specific logic.
+    """
+    matrix = np.asarray(
+        covariance,
+        dtype=float,
+    )
+
+    if (
+        matrix.ndim != 2
+        or matrix.shape[0] == 0
+        or matrix.shape[0] != matrix.shape[1]
+    ):
+        raise ValueError(
+            "covariance must be a non-empty square matrix."
+        )
+
+    if not np.all(
+        np.isfinite(
+            matrix
+        )
+    ):
+        raise ValueError(
+            "covariance must contain only finite values."
+        )
+
+    if not np.allclose(
+        matrix,
+        matrix.T,
+        rtol=1e-12,
+        atol=1e-12,
+    ):
+        raise ValueError(
+            "covariance must be symmetric."
+        )
+
+    n_features = int(
+        matrix.shape[0]
+    )
+
+    if n_components is None:
+        component_count = (
+            n_features
+        )
+    else:
+        if (
+            isinstance(n_components, bool)
+            or not isinstance(n_components, int)
+            or n_components <= 0
+            or n_components > n_features
+        ):
+            raise ValueError(
+                "n_components must be a positive integer "
+                "not exceeding the covariance dimension."
+            )
+
+        component_count = (
+            n_components
+        )
+
+    eigenvalues, eigenvectors = (
+        np.linalg.eigh(
+            matrix
+        )
+    )
+
+    order = np.argsort(
+        eigenvalues
+    )[::-1]
+
+    eigenvalues = eigenvalues[
+        order
+    ]
+
+    eigenvectors = eigenvectors[
+        :,
+        order
+    ]
+
+    # Permit tiny negative numerical noise but reject a materially
+    # indefinite matrix.
+    tolerance = (
+        max(
+            1.0,
+            float(
+                np.max(
+                    np.abs(
+                        eigenvalues
+                    )
+                )
+            ),
+        )
+        * 1e-12
+    )
+
+    if np.min(
+        eigenvalues
+    ) < -tolerance:
+        raise ValueError(
+            "covariance must be positive semidefinite."
+        )
+
+    total_variance = float(
+        np.sum(
+            eigenvalues
+        )
+    )
+
+    if not (
+        math.isfinite(
+            total_variance
+        )
+        and total_variance > 0.0
+    ):
+        raise ValueError(
+            "covariance must have positive total variance."
+        )
+
+    explained_variance_ratio = (
+        eigenvalues
+        / total_variance
+    )
+
+    return {
+        "eigenvalues": np.asarray(
+            eigenvalues[
+                :component_count
+            ],
+            dtype=float,
+        ),
+        "components": np.asarray(
+            eigenvectors[
+                :,
+                :component_count
+            ],
+            dtype=float,
+        ),
+        "explained_variance_ratio": np.asarray(
+            explained_variance_ratio[
+                :component_count
+            ],
+            dtype=float,
+        ),
+        "cumulative_explained_variance_ratio": float(
+            np.sum(
+                explained_variance_ratio[
+                    :component_count
+                ]
+            )
+        ),
+    }
