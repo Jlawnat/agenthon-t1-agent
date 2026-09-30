@@ -1,0 +1,555 @@
+from __future__ import annotations
+
+import ast
+from dataclasses import dataclass
+from pathlib import Path
+import re
+from typing import Any, Sequence
+
+from agent.offline_router import (
+    TaskFingerprint,
+    inspect_task_fingerprint,
+)
+from agent.qf_primitives import PRIMITIVE_API_CATALOG
+
+
+MAX_SELECTED_CAPABILITIES = 3
+MIN_SEMANTIC_SCORE = 3
+MIN_TOTAL_SCORE = 5
+MAX_CAPABILITY_PROMPT_GROWTH_CHARS = 6000
+CANDIDATE_LIBRARY_EXPORTS: dict[str, tuple[str, ...]] = {
+    "derivatives.py": (
+        "TwoAssetCalibration",
+        "calibrate_two_asset_gbm",
+        "exchange_volatility",
+        "margrabe_price",
+        "kirk_spread_price",
+        "monte_carlo_spread_prices",
+    ),
+    "event_study.py": (
+        "EventStudySpec",
+        "EventRecord",
+        "prepare_event_study_returns",
+        "build_event_records",
+        "corrado_rank_statistics",
+        "average_pairwise_residual_correlation",
+        "kolari_pynnonen_statistics",
+    ),
+    "fixed_income.py": (
+        "BootstrappedCurve",
+        "discount_factor_from_zero",
+        "interpolate_zero_rate",
+        "bootstrap_par_curve",
+        "reprice_par_bond",
+    ),
+    "portfolio.py": (
+        "MomentumSpec",
+        "clean_price_panel",
+        "simple_returns_from_prices",
+        "cross_sectional_momentum_path",
+        "summarize_return_path",
+    ),
+    "risk.py": (
+        "aligned_log_returns",
+        "historical_var_es",
+        "normal_var_es",
+        "student_t_var_es",
+        "exponential_weights",
+        "weighted_quantile",
+        "age_weighted_var_es",
+        "ewma_covariance",
+        "ewma_portfolio_volatility",
+        "overlapping_horizon_returns",
+        "expanding_historical_backtest",
+    ),
+    "volatility.py": (
+        "OhlcVarianceEstimate",
+        "validate_ohlc",
+        "ohlc_variance_estimators",
+        "annualized_volatility",
+        "rolling_ohlc_estimators",
+        "estimator_arrays",
+        "efficiency_ratios",
+    ),
+}
+CANDIDATE_LIBRARY_FILENAMES = (
+    "__init__.py",
+    *CANDIDATE_LIBRARY_EXPORTS,
+)
+
+_PLANNER_INSPECTION_KEYS = (
+    "type",
+    "rows",
+    "sample_rows_used",
+    "sampled",
+    "columns",
+    "dtypes",
+    "missing",
+    "delimiter",
+    "keys",
+    "truncated_keys",
+    "length",
+    "chars_at_least",
+    "truncated",
+    "member_count",
+    "members_truncated",
+    "extension_counts",
+    "total_uncompressed_bytes",
+    "total_compressed_bytes",
+    "suffix",
+    "error",
+)
+
+
+WeightedTerms = tuple[tuple[int, tuple[str, ...]], ...]
+WeightedSchemas = tuple[tuple[frozenset[str], int], ...]
+
+
+@dataclass(frozen=True)
+class CapabilityDescriptor:
+    """A general algorithm library that House-authored code may compose."""
+
+    capability_id: str
+    import_path: str
+    summary: str
+    api_signatures: tuple[str, ...]
+    primitive_names: tuple[str, ...]
+    semantic_terms: WeightedTerms
+    csv_schemas: WeightedSchemas = ()
+    json_schemas: WeightedSchemas = ()
+    minimum_price_panels: int = 0
+
+    def to_prompt_dict(self) -> dict[str, object]:
+        return {
+            "capability": self.capability_id,
+            "import": self.import_path,
+            "purpose": self.summary,
+            "apis": list(self.api_signatures),
+        }
+
+
+@dataclass(frozen=True)
+class RankedCapability:
+    descriptor: CapabilityDescriptor
+    semantic_score: int
+    data_score: int
+    matched_evidence: tuple[str, ...]
+
+    @property
+    def total_score(self) -> int:
+        return self.semantic_score + self.data_score
+
+    def to_prompt_dict(self) -> dict[str, object]:
+        payload = self.descriptor.to_prompt_dict()
+        payload["selection_evidence"] = list(self.matched_evidence)
+        return payload
+
+
+CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
+    CapabilityDescriptor(
+        capability_id="market-risk-statistics",
+        import_path="offline_common.risk",
+        summary=(
+            "Return alignment, historical and parametric tail risk, "
+            "exponential weighting, EWMA covariance, horizon aggregation, "
+            "and expanding-window coverage diagnostics."
+        ),
+        api_signatures=(
+            "aligned_log_returns(frame, *, date_column, symbol_column, close_column) -> tuple[DataFrame, DataFrame, dict[str, int]]",
+            "historical_var_es(returns, *, alpha, notional) -> tuple[float, float]",
+            "normal_var_es(returns, *, alpha, notional) -> tuple[float, float]",
+            "student_t_var_es(returns, *, alpha, notional) -> tuple[float, float]",
+            "age_weighted_var_es(returns, *, alpha, notional, decay) -> tuple[float, float]",
+            "ewma_covariance(asset_returns, *, decay) -> ndarray",
+            "ewma_portfolio_volatility(asset_returns, *, decay, weights) -> float",
+            "overlapping_horizon_returns(returns, *, horizon) -> ndarray",
+            "expanding_historical_backtest(returns, *, alpha, minimum_observations) -> tuple[int, int, float, float]",
+        ),
+        primitive_names=(
+            "empirical_var_es_from_losses",
+            "ewma_weights",
+            "fit_garch11_zero_mean",
+            "garch11_forecast_variance",
+            "fit_gpd_exceedances",
+            "evt_var_es_from_gpd",
+            "hill_tail_index",
+            "pca_from_covariance",
+        ),
+        semantic_terms=(
+            (5, ("value-at-risk", "value at risk", "expected shortfall", "cvar")),
+            (4, ("historical var", "student-t", "student t", "tail risk")),
+            (3, ("ewma covariance", "risk backtest", "portfolio volatility")),
+            (2, ("var",)),
+        ),
+        csv_schemas=(
+            (frozenset({"date", "symbol", "close"}), 4),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="fixed-income-curves",
+        import_path="offline_common.fixed_income",
+        summary=(
+            "Continuous zero-rate discounting, zero-rate interpolation, "
+            "sequential par-curve bootstrapping, and calibration repricing."
+        ),
+        api_signatures=(
+            "discount_factor_from_zero(zero_rate, maturity) -> float",
+            "interpolate_zero_rate(maturity, *, known_maturities, known_zero_rates) -> float",
+            "bootstrap_par_curve(maturities, par_rates, *, coupon_frequency) -> BootstrappedCurve",
+            "reprice_par_bond(*, maturity, par_rate, coupon_frequency, curve) -> float",
+        ),
+        primitive_names=(
+            "discount_cashflow",
+            "discount_factor_from_continuous_zero_rate",
+            "continuous_zero_rate_from_discount_factor",
+            "log_linear_discount_factor",
+            "bootstrap_annual_par_discount_factors",
+        ),
+        semantic_terms=(
+            (5, ("curve bootstrap", "bootstrap a curve", "par curve")),
+            (4, ("yield curve", "zero curve", "discount curve", "ois curve")),
+            (3, ("discount factor", "zero rate", "forward rate", "par yield")),
+        ),
+        json_schemas=(
+            (frozenset({"maturities", "par_rates"}), 4),
+            (frozenset({"maturities", "rates"}), 3),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="two-asset-derivatives",
+        import_path="offline_common.derivatives",
+        summary=(
+            "Aligned two-asset GBM calibration, exchange volatility, "
+            "Margrabe and Kirk prices, and seeded correlated Monte Carlo."
+        ),
+        api_signatures=(
+            "calibrate_two_asset_gbm(first, second, *, annualization=252) -> TwoAssetCalibration",
+            "exchange_volatility(sigma1, sigma2, rho) -> float",
+            "margrabe_price(*, S1, S2, sigma1, sigma2, rho, T, q1, q2) -> tuple[float, float]",
+            "kirk_spread_price(*, S1, S2, K, sigma1, sigma2, rho, T, r, q1, q2) -> float",
+            "monte_carlo_spread_prices(*, S1, S2, strikes, sigma1, sigma2, rho, T, r, q1, q2, n_paths, rng) -> list[tuple[float, float]]",
+        ),
+        primitive_names=(
+            "black_scholes_price",
+            "historical_log_return_calibration",
+            "central_price_delta",
+        ),
+        semantic_terms=(
+            (6, ("margrabe", "kirk")),
+            (5, ("exchange option", "spread option")),
+            (3, ("two-asset", "two asset", "correlated assets")),
+        ),
+        csv_schemas=(
+            (frozenset({"date", "close"}), 2),
+        ),
+        minimum_price_panels=2,
+    ),
+    CapabilityDescriptor(
+        capability_id="portfolio-time-series",
+        import_path="offline_common.portfolio",
+        summary=(
+            "Causal panel cleaning, simple-return construction, "
+            "cross-sectional momentum paths, and return-path summaries."
+        ),
+        api_signatures=(
+            "MomentumSpec(lookback_start, skip_recent, valid_start, long_count, short_count, periods_per_year)",
+            "clean_price_panel(frame, *, date_column='date') -> tuple[DataFrame, list[str]]",
+            "simple_returns_from_prices(prices, *, asset_columns, date_column='date') -> DataFrame",
+            "cross_sectional_momentum_path(returns, *, asset_columns, spec, date_column='date') -> DataFrame",
+            "summarize_return_path(path, *, periods_per_year) -> dict[str, float]",
+        ),
+        primitive_names=(
+            "sma_seeded_ema",
+            "ewma_annualized_volatility",
+            "log_return_performance",
+            "normalize_nonnegative",
+            "largest_remainder_allocate",
+            "ols_with_intercept",
+            "pca_from_observations",
+        ),
+        semantic_terms=(
+            (5, ("cross-sectional momentum", "cross sectional momentum")),
+            (4, ("long-short portfolio", "long short portfolio", "relative strength")),
+            (3, ("portfolio backtest", "momentum strategy")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="event-study-statistics",
+        import_path="offline_common.event_study",
+        summary=(
+            "Trading-day event alignment, market-model abnormal returns, "
+            "rank tests, residual dependence, and adjusted inference."
+        ),
+        api_signatures=(
+            "EventStudySpec(estimation_start, estimation_end, event_start, event_end)",
+            "prepare_event_study_returns(stock_prices, market_prices) -> tuple[DataFrame, list[str]]",
+            "build_event_records(merged_returns, events, *, spec) -> list[EventRecord]",
+            "corrado_rank_statistics(records) -> tuple[float, float]",
+            "average_pairwise_residual_correlation(records, *, minimum_overlap=10) -> float",
+            "kolari_pynnonen_statistics(records) -> tuple[float, float, float]",
+        ),
+        primitive_names=(
+            "ols_with_intercept",
+        ),
+        semantic_terms=(
+            (6, ("event study", "event-study")),
+            (4, ("abnormal return", "abnormal returns", "caar")),
+            (3, ("corrado", "kolari", "pynnönen", "pynnonen")),
+        ),
+        csv_schemas=(
+            (frozenset({"ticker", "event_date"}), 5),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="ohlc-volatility",
+        import_path="offline_common.volatility",
+        summary=(
+            "OHLC validation, close-to-close and range-based variance, "
+            "rolling estimators, annualisation, and relative efficiency."
+        ),
+        api_signatures=(
+            "validate_ohlc(frame) -> bool",
+            "ohlc_variance_estimators(frame, *, prior_close=None) -> OhlcVarianceEstimate",
+            "annualized_volatility(daily_variance, *, trading_days=252.0) -> float",
+            "rolling_ohlc_estimators(frame, *, window) -> list[OhlcVarianceEstimate]",
+            "estimator_arrays(estimates) -> dict[str, ndarray]",
+            "efficiency_ratios(variance_series) -> dict[str, float]",
+        ),
+        primitive_names=(
+            "historical_log_return_calibration",
+            "ewma_annualized_volatility",
+            "fit_garch11_zero_mean",
+        ),
+        semantic_terms=(
+            (6, ("ohlc volatility", "range-based volatility", "range based volatility")),
+            (5, ("parkinson", "garman-klass", "garman klass", "rogers-satchell", "yang-zhang")),
+            (3, ("ohlc", "realized volatility", "realised volatility")),
+        ),
+        csv_schemas=(
+            (frozenset({"open", "high", "low", "close"}), 5),
+        ),
+    ),
+)
+
+
+def curated_candidate_module_source(
+    source: str,
+    *,
+    filename: str,
+) -> str:
+    """Return the dependency closure of the approved computational API."""
+
+    exports = CANDIDATE_LIBRARY_EXPORTS.get(filename)
+    if exports is None:
+        if filename == "__init__.py":
+            return '"""Curated general finance computations."""\n'
+        raise ValueError(f"Unsupported candidate capability module: {filename}")
+
+    tree = ast.parse(source, filename=filename)
+    definitions: dict[str, ast.stmt] = {}
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            definitions[node.name] = node
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    definitions[target.id] = node
+
+    missing = sorted(set(exports) - definitions.keys())
+    if missing:
+        raise ValueError(
+            f"Candidate capability exports missing from {filename}: "
+            + ", ".join(missing)
+        )
+
+    selected_names = set(exports)
+    pending = list(exports)
+    while pending:
+        name = pending.pop()
+        node = definitions[name]
+        for reference in ast.walk(node):
+            if not isinstance(reference, ast.Name):
+                continue
+            dependency = reference.id
+            if dependency in definitions and dependency not in selected_names:
+                selected_names.add(dependency)
+                pending.append(dependency)
+
+    selected_node_ids = {
+        id(definitions[name])
+        for name in selected_names
+    }
+    body: list[ast.stmt] = []
+    for index, node in enumerate(tree.body):
+        is_docstring = (
+            index == 0
+            and isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        )
+        if (
+            is_docstring
+            or isinstance(node, (ast.Import, ast.ImportFrom))
+            or id(node) in selected_node_ids
+        ):
+            body.append(node)
+
+    body.append(
+        ast.Assign(
+            targets=[ast.Name(id="__all__", ctx=ast.Store())],
+            value=ast.Tuple(
+                elts=[ast.Constant(value=name) for name in exports],
+                ctx=ast.Load(),
+            ),
+        )
+    )
+    curated = ast.Module(body=body, type_ignores=[])
+    ast.fix_missing_locations(curated)
+    return ast.unparse(curated) + "\n"
+
+
+def compact_planner_data_inspections(
+    inspections: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Keep planning-relevant structure while omitting raw data previews."""
+
+    compact: dict[str, dict[str, Any]] = {}
+    for path, details in inspections.items():
+        item = {
+            key: details[key]
+            for key in _PLANNER_INSPECTION_KEYS
+            if key in details
+        }
+        members = details.get("members")
+        if isinstance(members, list):
+            item["members"] = [
+                {
+                    key: member[key]
+                    for key in ("name", "size", "compressed_size")
+                    if isinstance(member, dict) and key in member
+                }
+                for member in members[:30]
+                if isinstance(member, dict)
+            ]
+        compact[str(path)] = item
+    return compact
+
+
+def _normalize(text: str) -> str:
+    return re.sub(
+        r"\s+",
+        " ",
+        str(text).lower().replace("–", "-").replace("—", "-"),
+    ).strip()
+
+
+def _contains(text: str, phrase: str) -> bool:
+    if phrase == "var":
+        return bool(re.search(r"\bvar\b", text))
+    return phrase in text
+
+
+def _semantic_score(
+    text: str,
+    descriptor: CapabilityDescriptor,
+) -> tuple[int, list[str]]:
+    score = 0
+    evidence: list[str] = []
+    for weight, alternatives in descriptor.semantic_terms:
+        matched = next(
+            (phrase for phrase in alternatives if _contains(text, phrase)),
+            None,
+        )
+        if matched is not None:
+            score += weight
+            evidence.append(f"instruction mentions {matched}")
+    return score, evidence
+
+
+def _schema_score(
+    fingerprint: TaskFingerprint,
+    descriptor: CapabilityDescriptor,
+) -> tuple[int, list[str]]:
+    score = 0
+    evidence: list[str] = []
+    for required, weight in descriptor.csv_schemas:
+        if any(required.issubset(columns) for columns in fingerprint.csv_columns):
+            score += weight
+            evidence.append(
+                "tabular schema includes " + ", ".join(sorted(required))
+            )
+    for required, weight in descriptor.json_schemas:
+        if any(required.issubset(keys) for keys in fingerprint.json_keys):
+            score += weight
+            evidence.append(
+                "structured data includes " + ", ".join(sorted(required))
+            )
+    if descriptor.minimum_price_panels:
+        panel_count = sum(
+            1
+            for columns in fingerprint.csv_columns
+            if {"date", "close"}.issubset(columns)
+        )
+        if panel_count >= descriptor.minimum_price_panels:
+            score += 3
+            evidence.append("multiple dated price series are available")
+    return score, evidence
+
+
+def rank_capabilities(
+    *,
+    instruction: str,
+    task_dir: Path,
+    limit: int = MAX_SELECTED_CAPABILITIES,
+) -> tuple[RankedCapability, ...]:
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+        raise ValueError("limit must be a non-negative integer")
+    if limit == 0:
+        return ()
+
+    text = _normalize(instruction)
+    fingerprint = inspect_task_fingerprint(Path(task_dir))
+    ranked: list[RankedCapability] = []
+
+    for descriptor in CAPABILITY_CATALOG:
+        semantic_score, semantic_evidence = _semantic_score(text, descriptor)
+        data_score, data_evidence = _schema_score(fingerprint, descriptor)
+        if semantic_score < MIN_SEMANTIC_SCORE:
+            continue
+        if semantic_score + data_score < MIN_TOTAL_SCORE:
+            continue
+        ranked.append(
+            RankedCapability(
+                descriptor=descriptor,
+                semantic_score=semantic_score,
+                data_score=data_score,
+                matched_evidence=tuple(semantic_evidence + data_evidence),
+            )
+        )
+
+    ranked.sort(
+        key=lambda item: (
+            -item.total_score,
+            -item.semantic_score,
+            -item.data_score,
+            item.descriptor.capability_id,
+        )
+    )
+    return tuple(ranked[:limit])
+
+
+def relevant_primitive_catalog(
+    capabilities: Sequence[RankedCapability],
+) -> tuple[str, ...]:
+    requested = {
+        name
+        for capability in capabilities
+        for name in capability.descriptor.primitive_names
+    }
+    return tuple(
+        entry
+        for entry in PRIMITIVE_API_CATALOG
+        if entry.split("(", 1)[0].strip() in requested
+    )

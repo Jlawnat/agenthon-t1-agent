@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from typing import Any
 
@@ -11,6 +11,12 @@ from agent.candidate_production import (
 from agent.candidate_prompt import (
     build_candidate_prompt,
     build_precision_guidance,
+)
+from agent.capability_bridge import (
+    RankedCapability,
+    compact_planner_data_inspections,
+    rank_capabilities,
+    relevant_primitive_catalog,
 )
 from agent.compiled_specification import CompiledSpecification
 from agent.front_half import FrontHalfDependencies
@@ -63,6 +69,16 @@ class RuntimePlan:
     skill_packs: tuple[Any, ...]
     data_inspections: dict[str, dict[str, Any]]
     strategies: tuple[_StrategyEnvelope, ...]
+    selected_capabilities: tuple[RankedCapability, ...] = field(
+        default=(),
+        compare=False,
+        repr=False,
+    )
+    relevant_runtime_primitives: tuple[str, ...] = field(
+        default=(),
+        compare=False,
+        repr=False,
+    )
 
 
 def _response_tokens(
@@ -481,6 +497,22 @@ def build_runtime_components(
             snapshot.inspect_data()
         )
 
+        selected_capabilities = (
+            rank_capabilities(
+                instruction=(
+                    specification
+                    .instruction_text
+                ),
+                task_dir=snapshot.task_dir,
+            )
+        )
+
+        relevant_runtime_primitives = (
+            relevant_primitive_catalog(
+                selected_capabilities
+            )
+        )
+
         specification_prompt = (
             build_specification_prompt(
                 spec=specification,
@@ -560,6 +592,17 @@ def build_runtime_components(
                     specification
                     .instruction_text
                 ),
+                data_inspections=(
+                    compact_planner_data_inspections(
+                        data_inspections
+                    )
+                ),
+                selected_capabilities=(
+                    selected_capabilities
+                ),
+                relevant_runtime_primitives=(
+                    relevant_runtime_primitives
+                ),
             )
         )
 
@@ -625,6 +668,12 @@ def build_runtime_components(
                 data_inspections
             ),
             strategies=strategies,
+            selected_capabilities=(
+                selected_capabilities
+            ),
+            relevant_runtime_primitives=(
+                relevant_runtime_primitives
+            ),
         )
 
     def generate(
@@ -660,6 +709,14 @@ def build_runtime_components(
             data_inspections=(
                 request.plan
                 .data_inspections
+            ),
+            selected_capabilities=(
+                request.plan
+                .selected_capabilities
+            ),
+            relevant_runtime_primitives=(
+                request.plan
+                .relevant_runtime_primitives
             ),
         )
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from agent.capability_bridge import RankedCapability
 from agent.compiled_specification import CompiledSpecification
 from agent.planner import CandidateStrategy
 from agent.qf_primitives import PRIMITIVE_API_CATALOG
@@ -234,10 +235,19 @@ def build_candidate_prompt(
     strategy: CandidateStrategy,
     skill_packs: list[SkillPack],
     data_inspections: dict[str, dict[str, Any]],
+    selected_capabilities: tuple[RankedCapability, ...] = (),
+    relevant_runtime_primitives: tuple[str, ...] = (),
 ) -> str:
     payload = {
         "instruction": instruction_text,
         "compiled_specification": spec.to_dict(),
+        "selected_general_capabilities": [
+            capability.to_prompt_dict()
+            for capability in selected_capabilities
+        ],
+        "relevant_runtime_primitives": list(
+            relevant_runtime_primitives
+        ),
         "candidate_strategy": strategy.to_dict(),
         "active_skill_packs": [
             pack.to_dict()
@@ -286,6 +296,10 @@ Generalization protocol for unfamiliar domains:
    available_runtime_primitives. Prefer those tested primitives when they
    match the contract, but do not force them when the task requires a
    different convention.
+   selected_general_capabilities lists relevant read-only computation
+   modules and their supported APIs. Treat the selection as advisory: choose
+   the method yourself, import a helper only when its documented conventions
+   match, and author all task-specific composition and output construction.
 4. Implement the solution self-contained in solver.py. Do not require the
    existence of a task-specific solver, task ID, hidden reference value, or
    checker behavior.

@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass, asdict
 from typing import Any
 
+from agent.capability_bridge import RankedCapability
 from agent.compiled_specification import CompiledSpecification
 from agent.planning import TaskPlan
 from agent.skill_packs import SkillPack
@@ -38,11 +39,22 @@ def build_planner_prompt(
     task_plan: TaskPlan,
     skill_packs: list[SkillPack],
     instruction_text: str,
+    data_inspections: dict[str, dict[str, Any]] | None = None,
+    selected_capabilities: tuple[RankedCapability, ...] = (),
+    relevant_runtime_primitives: tuple[str, ...] = (),
 ) -> str:
 
     payload = {
         "instruction": instruction_text,
         "compiled_specification": spec.to_dict(),
+        "selected_general_capabilities": [
+            capability.to_prompt_dict()
+            for capability in selected_capabilities
+        ],
+        "relevant_runtime_primitives": list(
+            relevant_runtime_primitives
+        ),
+        "data_inspections": data_inspections or {},
         "task_plan": task_plan.to_dict(),
         "active_skill_packs": [
             pack.to_dict()
@@ -84,6 +96,9 @@ Important rules:
   where required.
 - Do not rely on hidden tests or benchmark checker files.
 - Do not generate implementation code.
+- Treat selected general capabilities as advisory algorithm components.
+  Choose the strategy yourself and use a helper only when its documented
+  conventions match the task.
 
 Return ONLY valid JSON in this exact structure:
 

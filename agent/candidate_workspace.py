@@ -7,6 +7,11 @@ import shlex
 import shutil
 import stat
 
+from agent.capability_bridge import (
+    CANDIDATE_LIBRARY_FILENAMES,
+    curated_candidate_module_source,
+)
+
 
 class CandidateWorkspaceError(
     RuntimeError
@@ -542,6 +547,55 @@ class CandidateWorkspace:
             stat.S_IRUSR
             | stat.S_IRGRP
             | stat.S_IROTH
+        )
+
+        common_source = (
+            Path(__file__)
+            .with_name("offline_common")
+        )
+        common_destination = (
+            library_dir
+            / "offline_common"
+        )
+
+        if not common_source.is_dir():
+            raise CandidateWorkspaceError(
+                "Curated general finance library is missing."
+            )
+
+        common_destination.mkdir()
+
+        for filename in CANDIDATE_LIBRARY_FILENAMES:
+            source = common_source / filename
+            destination = common_destination / filename
+
+            if not source.is_file() or source.is_symlink():
+                raise CandidateWorkspaceError(
+                    "Curated general finance module is missing or unsafe: "
+                    + filename
+                )
+
+            curated_source = curated_candidate_module_source(
+                source.read_text(encoding="utf-8"),
+                filename=filename,
+            )
+            destination.write_text(
+                curated_source,
+                encoding="utf-8",
+            )
+            destination.chmod(
+                stat.S_IRUSR
+                | stat.S_IRGRP
+                | stat.S_IROTH
+            )
+
+        common_destination.chmod(
+            stat.S_IRUSR
+            | stat.S_IXUSR
+            | stat.S_IRGRP
+            | stat.S_IXGRP
+            | stat.S_IROTH
+            | stat.S_IXOTH
         )
 
         environment_data = (
