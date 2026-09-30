@@ -10,6 +10,7 @@ import re
 import stat
 
 import pandas as pd
+import pytest
 
 from agent.candidate_prompt import build_candidate_prompt
 from agent.candidate_runner import run_candidate
@@ -48,6 +49,18 @@ def _task(tmp_path: Path, instruction: str) -> Path:
         encoding="utf-8",
     )
     return task
+
+
+def _write_ohlc(path: Path) -> None:
+    pd.DataFrame(
+        {
+            "date": ["2025-01-01", "2025-01-02"],
+            "open": [100.0, 101.0],
+            "high": [102.0, 103.0],
+            "low": [99.0, 100.0],
+            "close": [101.0, 102.0],
+        }
+    ).to_csv(path, index=False)
 
 
 def test_ranking_combines_instruction_and_ohlc_fingerprint(
@@ -489,3 +502,175 @@ def test_staged_modules_have_no_solution_or_output_entrypoints(
         assert not any(term in source for term in forbidden_output_operations)
         assert not any(term in source for term in forbidden_prepared_helpers)
         assert "task_id" not in source
+
+
+def test_asian_option_ohlc_calibration_does_not_select_ohlc_estimators(
+    tmp_path: Path,
+) -> None:
+    task = _task(
+        tmp_path,
+        "Price an Asian option using OHLC history only for calibration.",
+    )
+    _write_ohlc(task / "environment" / "data" / "prices.csv")
+
+    selected = rank_capabilities(
+        instruction=(task / "instruction.md").read_text(),
+        task_dir=task,
+    )
+
+    assert "ohlc-volatility" not in {
+        item.descriptor.capability_id for item in selected
+    }
+
+
+def test_kirk_margrabe_avoids_irrelevant_ohlc_guidance(
+    tmp_path: Path,
+) -> None:
+    task = _task(
+        tmp_path,
+        "Calibrate two assets, then price Kirk spread and Margrabe options.",
+    )
+    for name in ("first.csv", "second.csv"):
+        _write_ohlc(task / "environment" / "data" / name)
+
+    selected = rank_capabilities(
+        instruction=(task / "instruction.md").read_text(),
+        task_dir=task,
+    )
+    capability_ids = [
+        item.descriptor.capability_id for item in selected
+    ]
+
+    assert capability_ids[0] == "two-asset-derivatives"
+    assert "ohlc-volatility" not in capability_ids
+
+
+def test_dedicated_ohlc_methods_still_select_ohlc_capability(
+    tmp_path: Path,
+) -> None:
+    task = _task(
+        tmp_path,
+        (
+            "Estimate Parkinson, Garman-Klass, Rogers-Satchell, and "
+            "Yang-Zhang range-based volatility."
+        ),
+    )
+    _write_ohlc(task / "environment" / "data" / "prices.csv")
+
+    selected = rank_capabilities(
+        instruction=(task / "instruction.md").read_text(),
+        task_dir=task,
+    )
+
+    assert selected[0].descriptor.capability_id == "ohlc-volatility"
+
+
+@pytest.mark.parametrize(
+    ("instruction", "data_kind"),
+    (
+        ("Do not calculate VaR; report the sample mean only.", None),
+        (
+            "OHLC data is provided but use close-to-close returns only.",
+            "ohlc",
+        ),
+        (
+            "Do not bootstrap the supplied yield curve; use it unchanged.",
+            "curve",
+        ),
+        (
+            "Estimate realized volatility from intraday returns.",
+            None,
+        ),
+        (
+            "Compare this estimator against Parkinson but do not use Parkinson.",
+            None,
+        ),
+    ),
+)
+def test_excluded_or_comparison_only_methods_do_not_select_capabilities(
+    tmp_path: Path,
+    instruction: str,
+    data_kind: str | None,
+) -> None:
+    task = _task(tmp_path, instruction)
+    if data_kind == "ohlc":
+        _write_ohlc(task / "environment" / "data" / "prices.csv")
+    elif data_kind == "curve":
+        (task / "environment" / "data" / "curve.json").write_text(
+            json.dumps(
+                {
+                    "maturities": [1, 2],
+                    "par_rates": [0.03, 0.04],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    assert rank_capabilities(
+        instruction=instruction,
+        task_dir=task,
+    ) == (), instruction
+
+
+def test_student_t_copula_does_not_select_market_risk(
+    tmp_path: Path,
+) -> None:
+    task = _task(
+        tmp_path,
+        "Fit a Student-t copula to paired equity returns.",
+    )
+    pd.DataFrame(
+        {
+            "date": ["2025-01-01", "2025-01-02"],
+            "symbol": ["AAA", "AAA"],
+            "open": [100.0, 101.0],
+            "high": [102.0, 103.0],
+            "low": [99.0, 100.0],
+            "close": [101.0, 102.0],
+        }
+    ).to_csv(
+        task / "environment" / "data" / "prices.csv",
+        index=False,
+    )
+
+    assert rank_capabilities(
+        instruction=(task / "instruction.md").read_text(),
+        task_dir=task,
+    ) == ()
+
+
+def test_generic_event_study_does_not_expose_stock_event_workflow(
+    tmp_path: Path,
+) -> None:
+    task = _task(
+        tmp_path,
+        "Run an event study of FOMC text and Treasury yield changes.",
+    )
+
+    assert rank_capabilities(
+        instruction=(task / "instruction.md").read_text(),
+        task_dir=task,
+    ) == ()
+
+
+@pytest.mark.parametrize(
+    "instruction",
+    (
+        "Impose a parametric VaR constraint on portfolio leverage.",
+        "Estimate position VaR and ES at 99% confidence.",
+        "Compare Hill and Smith tail index estimators.",
+        "Fit per-asset GARCH(1,1) conditional volatility for a CTA strategy.",
+    ),
+)
+def test_specific_risk_language_selects_market_risk_capability(
+    tmp_path: Path,
+    instruction: str,
+) -> None:
+    task = _task(tmp_path, instruction)
+
+    selected = rank_capabilities(
+        instruction=instruction,
+        task_dir=task,
+    )
+
+    assert selected[0].descriptor.capability_id == "market-risk-statistics"

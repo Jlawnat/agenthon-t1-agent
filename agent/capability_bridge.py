@@ -177,7 +177,29 @@ CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
         ),
         semantic_terms=(
             (5, ("value-at-risk", "value at risk", "expected shortfall", "cvar")),
-            (4, ("historical var", "student-t", "student t", "tail risk")),
+            (
+                5,
+                (
+                    "tail index",
+                    "hill estimator",
+                    "generalized pareto",
+                    "garch(1,1)",
+                    "garch(1, 1)",
+                ),
+            ),
+            (
+                4,
+                (
+                    "historical var",
+                    "tail risk",
+                    "parametric var",
+                    "var constraint",
+                    "var-constrained",
+                    "var and es",
+                    "var & es",
+                    "var/es",
+                ),
+            ),
             (3, ("ewma covariance", "risk backtest", "portfolio volatility")),
             (2, ("var",)),
         ),
@@ -292,7 +314,7 @@ CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
             "ols_with_intercept",
         ),
         semantic_terms=(
-            (6, ("event study", "event-study")),
+            (3, ("event study", "event-study")),
             (4, ("abnormal return", "abnormal returns", "caar")),
             (3, ("corrado", "kolari", "pynnönen", "pynnonen")),
         ),
@@ -323,7 +345,6 @@ CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
         semantic_terms=(
             (6, ("ohlc volatility", "range-based volatility", "range based volatility")),
             (5, ("parkinson", "garman-klass", "garman klass", "rogers-satchell", "yang-zhang")),
-            (3, ("ohlc", "realized volatility", "realised volatility")),
         ),
         csv_schemas=(
             (frozenset({"open", "high", "low", "close"}), 5),
@@ -445,10 +466,55 @@ def _normalize(text: str) -> str:
     ).strip()
 
 
-def _contains(text: str, phrase: str) -> bool:
-    if phrase == "var":
-        return bool(re.search(r"\bvar\b", text))
-    return phrase in text
+_NEGATED_PREFIX = re.compile(
+    r"(?:"
+    r"\b(?:do|does|did|must|should)\s+not\b|"
+    r"\bnever\b|"
+    r"\bwithout\b|"
+    r"\bavoid(?:ed|ing)?\b|"
+    r"\bexclude(?:d|s|ing)?\b|"
+    r"\binstead\s+of\b|"
+    r"\brather\s+than\b"
+    r")[^.;!?]{0,80}$"
+)
+_COMPARISON_ONLY_PREFIX = re.compile(
+    r"\b(?:compare|benchmark|contrast)\b"
+    r"[^.;!?]{0,80}\b(?:against|to|with)\s*$"
+)
+
+
+def _phrase_occurrences(text: str, phrase: str) -> list[re.Match[str]]:
+    pattern = r"\bvar\b" if phrase == "var" else re.escape(phrase)
+    return list(re.finditer(pattern, text))
+
+
+def _is_actionable_occurrence(
+    text: str,
+    phrase: str,
+    occurrence: re.Match[str],
+) -> bool:
+    prefix = text[max(0, occurrence.start() - 100):occurrence.start()]
+    if _NEGATED_PREFIX.search(prefix):
+        return False
+    if _COMPARISON_ONLY_PREFIX.search(prefix):
+        return False
+
+    suffix = text[occurrence.end():occurrence.end() + 100]
+    repeated_exclusion = re.compile(
+        r"^\s*but\s+(?:do|does|must|should)\s+not\s+"
+        r"(?:calculate|compute|estimate|use|apply)\s+(?:the\s+)?"
+        + re.escape(phrase)
+    )
+    if repeated_exclusion.search(suffix):
+        return False
+    return True
+
+
+def _contains_actionable(text: str, phrase: str) -> bool:
+    return any(
+        _is_actionable_occurrence(text, phrase, occurrence)
+        for occurrence in _phrase_occurrences(text, phrase)
+    )
 
 
 def _semantic_score(
@@ -459,7 +525,11 @@ def _semantic_score(
     evidence: list[str] = []
     for weight, alternatives in descriptor.semantic_terms:
         matched = next(
-            (phrase for phrase in alternatives if _contains(text, phrase)),
+            (
+                phrase
+                for phrase in alternatives
+                if _contains_actionable(text, phrase)
+            ),
             None,
         )
         if matched is not None:
