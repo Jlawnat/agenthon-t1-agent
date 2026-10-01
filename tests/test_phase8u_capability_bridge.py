@@ -159,9 +159,13 @@ def test_capability_descriptors_are_generic_and_compliance_bounded() -> None:
     } == {
         "offline_common.derivatives",
         "offline_common.event_study",
+        "offline_common.execution",
         "offline_common.fixed_income",
         "offline_common.invariants",
+        "offline_common.ledger",
+        "offline_common.microstructure",
         "offline_common.panel",
+        "offline_common.volume_scheduling",
         "offline_common.portfolio",
         "offline_common.risk",
         "offline_common.statistics",

@@ -18,6 +18,36 @@ MIN_SEMANTIC_SCORE = 3
 MIN_TOTAL_SCORE = 5
 MAX_CAPABILITY_PROMPT_GROWTH_CHARS = 6000
 CANDIDATE_LIBRARY_EXPORTS: dict[str, tuple[str, ...]] = {
+    "execution.py": (
+        "two_way_turnover",
+        "one_way_turnover",
+        "transaction_cost",
+        "net_return_after_cost",
+        "lag_positions",
+        "rowwise_portfolio_returns",
+    ),
+    "ledger.py": (
+        "TradeUpdate",
+        "proportional_trade_cost",
+        "apply_trade",
+        "mark_to_market",
+        "position_pnl",
+    ),
+    "microstructure.py": (
+        "first_index_at_or_after",
+        "half_open_window_indices",
+        "participation_capped_quantity",
+        "exact_synchronized_venue_rows",
+    ),
+    "volume_scheduling.py": (
+        "normalize_profile",
+        "mean_volume_profile",
+        "median_volume_profile",
+        "exponentially_weighted_volume_profile",
+        "winsorized_mean_volume_profile",
+        "profile_r_squared",
+        "largest_remainder_allocation",
+    ),
     "invariants.py": (
         "finite_numeric_mask",
         "probability_bounds_mask",
@@ -174,6 +204,182 @@ class RankedCapability:
 
 
 CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
+    CapabilityDescriptor(
+        capability_id="causal-portfolio-execution",
+        import_path="offline_common.execution",
+        summary=(
+            "Portfolio weight turnover, linear transaction costs, "
+            "causal position lagging, and row-wise weighted returns."
+        ),
+        api_signatures=(
+            "two_way_turnover(previous, current) -> float",
+            "one_way_turnover(previous, current) -> float",
+            "transaction_cost(turnover, rate) -> float",
+            "net_return_after_cost(gross_return, turnover, rate) -> float",
+            "lag_positions(weights, *, periods=1, fill_value=0.0) -> ndarray",
+            "rowwise_portfolio_returns(weights, asset_returns) -> ndarray",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "one-day execution lag",
+                    "one day execution lag",
+                    "execution lag",
+                    "one-way turnover",
+                    "one way turnover",
+                ),
+            ),
+            (
+                5,
+                (
+                    "transaction cost on rebalance",
+                    "transaction costs on rebalance",
+                    "sum of absolute weight changes",
+                    "turnover cap",
+                    "turnover-capped",
+                ),
+            ),
+            (
+                5,
+                (
+                    "transaction cost",
+                    "transaction costs",
+                ),
+            ),
+            (
+                4,
+                (
+                    "portfolio turnover",
+                    "rebalance turnover",
+                    "weight changes",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="cash-position-ledger",
+        import_path="offline_common.ledger",
+        summary=(
+            "Signed trade updates for positions and cash, proportional "
+            "buy/sell costs, portfolio NAV from cash plus holdings, and "
+            "position P&L reconciliation."
+        ),
+        api_signatures=(
+            "proportional_trade_cost(quantity_change, price, *, buy_rate=0.0, sell_rate=None) -> float",
+            "apply_trade(*, cash, quantity, quantity_change, price, buy_rate=0.0, sell_rate=None) -> TradeUpdate",
+            "mark_to_market(cash, quantities, prices) -> float",
+            "position_pnl(quantity, entry_price, exit_price, *, total_cost=0.0) -> float",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "terminal cash balance",
+                    "cash balance after liquidation",
+                    "portfolio value = cash",
+                    "cash + shares",
+                ),
+            ),
+            (
+                6,
+                (
+                    "cash, equity, and daily p&l",
+                    "cash equity and daily p&l",
+                ),
+            ),
+            (
+                5,
+                (
+                    "daily portfolio value",
+                    "current_portfolio_value = cash",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="microstructure-temporal-alignment",
+        import_path="offline_common.microstructure",
+        summary=(
+            "Sorted timestamp lookup, half-open event windows, "
+            "participation-capped child sizing, and exact multi-venue "
+            "snapshot synchronization."
+        ),
+        api_signatures=(
+            "first_index_at_or_after(timestamps, target) -> int",
+            "half_open_window_indices(timestamps, *, start, end) -> tuple[int, int]",
+            "participation_capped_quantity(remaining_quantity, market_volume, participation_cap, max_child_quantity) -> float",
+            "exact_synchronized_venue_rows(frame, *, group_columns, venue_column, required_venues) -> DataFrame",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "participation-capped",
+                    "participation capped",
+                    "first quote at or after",
+                ),
+            ),
+            (
+                6,
+                (
+                    "synchronized snapshot",
+                    "synchronized snapshots",
+                    "synchronised snapshot",
+                    "synchronised snapshots",
+                ),
+            ),
+            (
+                5,
+                (
+                    "bucket volume",
+                    "exact timestamp alignment",
+                    "half-open time window",
+                    "half open time window",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="intraday-volume-scheduling",
+        import_path="offline_common.volume_scheduling",
+        summary=(
+            "Normalized intraday volume profiles, historical mean/median/"
+            "exponentially weighted/winsorized profile estimation, profile "
+            "R-squared, and deterministic integer allocation."
+        ),
+        api_signatures=(
+            "normalize_profile(values) -> ndarray",
+            "mean_volume_profile(history) -> ndarray",
+            "median_volume_profile(history) -> ndarray",
+            "exponentially_weighted_volume_profile(history, *, half_life) -> ndarray",
+            "winsorized_mean_volume_profile(history, *, lower_percentile=5.0, upper_percentile=95.0) -> ndarray",
+            "profile_r_squared(realized, predicted) -> float",
+            "largest_remainder_allocation(quantity, weights) -> ndarray",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "intraday volume-share",
+                    "intraday volume share",
+                    "volume-share profile",
+                    "volume share profile",
+                ),
+            ),
+            (
+                5,
+                (
+                    "final execution schedule",
+                    "winsorized mean",
+                ),
+            ),
+        ),
+    ),
     CapabilityDescriptor(
         capability_id="quantitative-validation-invariants",
         import_path="offline_common.invariants",
