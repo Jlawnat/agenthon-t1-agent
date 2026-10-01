@@ -18,6 +18,34 @@ MIN_SEMANTIC_SCORE = 3
 MIN_TOTAL_SCORE = 5
 MAX_CAPABILITY_PROMPT_GROWTH_CHARS = 6000
 CANDIDATE_LIBRARY_EXPORTS: dict[str, tuple[str, ...]] = {
+    "invariants.py": (
+        "finite_numeric_mask",
+        "probability_bounds_mask",
+        "is_positive_semidefinite",
+        "weight_sum_error",
+        "causal_order_mask",
+        "reconciliation_close",
+    ),
+    "panel.py": (
+        "zscore_ddof0",
+        "equal_count_bucket_labels",
+        "spearman_rank_correlation",
+        "residualize_against_controls",
+        "beta_neutral_projection",
+    ),
+    "statistics.py": (
+        "OlsFit",
+        "GrsResult",
+        "ols_with_inference",
+        "optimal_newey_west_lag",
+        "newey_west_covariance",
+        "newey_west_mean_tstat",
+        "durbin_watson",
+        "variance_inflation_factors",
+        "grs_joint_alpha_test",
+        "rolling_ols_coefficient",
+        "normalize_cross_section",
+    ),
     "derivatives.py": (
         "TwoAssetCalibration",
         "calibrate_two_asset_gbm",
@@ -146,6 +174,169 @@ class RankedCapability:
 
 
 CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
+    CapabilityDescriptor(
+        capability_id="quantitative-validation-invariants",
+        import_path="offline_common.invariants",
+        summary=(
+            "Finite-number checks, probability bounds, positive-"
+            "semidefinite matrix validation, portfolio-weight totals, "
+            "causal timestamp ordering, and additive reconciliation."
+        ),
+        api_signatures=(
+            "finite_numeric_mask(values) -> ndarray",
+            "probability_bounds_mask(values, *, upper=1.0, tolerance=0.0) -> ndarray",
+            "is_positive_semidefinite(matrix, *, tolerance=1e-10) -> bool",
+            "weight_sum_error(weights, *, target=1.0) -> float",
+            "causal_order_mask(earlier, later, *, strict=False) -> ndarray",
+            "reconciliation_close(actual, components, *, atol=1e-8, rtol=1e-6) -> ndarray",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "positive semidefinite",
+                    "positive semi-definite",
+                    "psd covariance",
+                    "psd correlation",
+                    "causal ordering",
+                    "causal timestamp",
+                ),
+            ),
+            (
+                5,
+                (
+                    "weights sum to one",
+                    "weights sum to 1",
+                    "probability bounds",
+                    "reconciliation check",
+                ),
+            ),
+            (
+                4,
+                (
+                    "finite numeric",
+                    "non-finite values",
+                    "accounting reconciliation",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="cross-sectional-panel-operations",
+        import_path="offline_common.panel",
+        summary=(
+            "Deterministic cross-sectional standardization, equal-count "
+            "bucket assignment, rank correlation, control residualization, "
+            "and beta-neutral weight projection."
+        ),
+        api_signatures=(
+            "zscore_ddof0(values) -> ndarray",
+            "equal_count_bucket_labels(n_observations, *, buckets) -> ndarray",
+            "spearman_rank_correlation(first, second) -> float",
+            "residualize_against_controls(values, controls, *, add_intercept=True) -> tuple[ndarray, ndarray]",
+            "beta_neutral_projection(weights, beta) -> ndarray",
+        ),
+        primitive_names=(
+            "ols_with_intercept",
+        ),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "beta-neutral",
+                    "beta neutral",
+                    "dependent double sort",
+                    "dependent double-sort",
+                ),
+            ),
+            (
+                5,
+                (
+                    "cross-sectional sort",
+                    "cross sectional sort",
+                    "residualize signal",
+                    "residualized signal",
+                    "residualise signal",
+                    "residualised signal",
+                ),
+            ),
+            (
+                5,
+                (
+                    "rank correlation",
+                    "spearman rank",
+                    "spearman correlation",
+                    "spearman ic",
+                ),
+            ),
+            (
+                4,
+                (
+                    "quantile portfolio",
+                    "quintile portfolio",
+                    "quintile sort",
+                    "quintile sorts",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="regression-factor-statistics",
+        import_path="offline_common.statistics",
+        summary=(
+            "OLS inference, Newey-West/HAC covariance, Durbin-Watson, "
+            "variance-inflation factors, GRS joint-alpha testing, rolling "
+            "OLS coefficients, and robust cross-sectional normalization."
+        ),
+        api_signatures=(
+            "ols_with_inference(design, response) -> OlsFit",
+            "optimal_newey_west_lag(n_observations) -> int",
+            "newey_west_covariance(design, residuals, *, lag) -> ndarray",
+            "newey_west_mean_tstat(values, *, lag) -> float",
+            "durbin_watson(residuals) -> float",
+            "variance_inflation_factors(factors) -> ndarray",
+            "grs_joint_alpha_test(alphas, residual_matrix, factor_matrix) -> GrsResult",
+            "rolling_ols_coefficient(design, response, *, window, coefficient_index) -> ndarray",
+            "normalize_cross_section(series) -> Series",
+        ),
+        primitive_names=(
+            "ols_with_intercept",
+            "pca_from_observations",
+        ),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "newey-west",
+                    "newey west",
+                    "hac covariance",
+                    "durbin-watson",
+                    "durbin watson",
+                    "variance inflation factor",
+                    "grs test",
+                    "gibbons ross shanken",
+                ),
+            ),
+            (
+                5,
+                (
+                    "rolling ols",
+                    "rolling regression",
+                    "joint alpha test",
+                ),
+            ),
+            (
+                4,
+                (
+                    "factor regression",
+                    "factor-model regression",
+                    "fama-french regression",
+                    "fama french regression",
+                ),
+            ),
+        ),
+    ),
     CapabilityDescriptor(
         capability_id="market-risk-statistics",
         import_path="offline_common.risk",
