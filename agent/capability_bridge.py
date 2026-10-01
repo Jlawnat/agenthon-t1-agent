@@ -100,6 +100,42 @@ CANDIDATE_LIBRARY_EXPORTS: dict[str, tuple[str, ...]] = {
         "bootstrap_par_curve",
         "reprice_par_bond",
     ),
+    "fx.py": (
+        "covered_interest_forward",
+        "invert_bid_ask",
+        "synthetic_cross_bid_ask",
+        "forward_points",
+        "implied_quote_rate_from_forward",
+        "continuous_basis_bps",
+        "forward_from_continuous_basis",
+        "log_linear_forward",
+    ),
+    "rate_curves.py": (
+        "simple_forward_rate",
+        "forward_discount_factor",
+        "fixed_leg_annuity",
+        "floating_leg_pv_per_unit",
+        "par_swap_rate",
+    ),
+    "bonds.py": (
+        "YieldDurationResult",
+        "discounted_cashflow_price",
+        "yield_and_durations",
+        "z_spread_from_continuous_curve",
+        "parallel_duration_convexity",
+        "symmetric_key_rate_durations",
+        "dv01_from_duration",
+    ),
+    "schedules.py": (
+        "parse_iso_date",
+        "add_months",
+        "year_fraction",
+        "generate_schedule",
+        "is_business_day",
+        "add_business_days",
+        "following_business_day",
+        "add_months_following",
+    ),
     "portfolio.py": (
         "MomentumSpec",
         "clean_price_panel",
@@ -602,6 +638,181 @@ CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
         ),
         csv_schemas=(
             (frozenset({"date", "symbol", "close"}), 4),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="financial-schedules-day-counts",
+        import_path="offline_common.schedules",
+        summary=(
+            "Month-safe date rolling, standard ACT and 30/360 year fractions, "
+            "backward payment schedules, and deterministic business-day adjustment."
+        ),
+        api_signatures=(
+            "parse_iso_date(value) -> date",
+            "add_months(value, months) -> date",
+            "year_fraction(start, end, *, convention) -> float",
+            "generate_schedule(effective, maturity, frequency_months) -> list[date]",
+            "is_business_day(value, *, holidays=()) -> bool",
+            "add_business_days(start, count, *, holidays=()) -> date",
+            "following_business_day(value, *, holidays=()) -> date",
+            "add_months_following(value, months, *, holidays=()) -> date",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "generated backward from maturity",
+                    "coupon schedules",
+                    "coupon schedule",
+                ),
+            ),
+            (
+                6,
+                (
+                    "following business-day adjustment",
+                    "following business day adjustment",
+                    "spot lags",
+                ),
+            ),
+            (
+                5,
+                (
+                    "30/360 us",
+                    "30/360 day count",
+                    "settlement dates",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="bond-risk-analytics",
+        import_path="offline_common.bonds",
+        summary=(
+            "Discounted bond cash-flow valuation, periodic-compounding yield "
+            "and duration analytics, constant z-spread solving, effective "
+            "duration/convexity, symmetric key-rate duration, and DV01."
+        ),
+        api_signatures=(
+            "discounted_cashflow_price(times, cash_flows, zero_rates) -> float",
+            "yield_and_durations(*, price, times, cash_flows, frequency) -> YieldDurationResult",
+            "z_spread_from_continuous_curve(*, price, times, cash_flows, zero_rates, lower_bound=-0.05, upper_bound=0.50) -> float",
+            "parallel_duration_convexity(*, base_price, price_up, price_down, bump) -> tuple[float, float]",
+            "symmetric_key_rate_durations(*, base_value, values_up, values_down, bump) -> ndarray",
+            "dv01_from_duration(price, duration) -> float",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "bond immunization",
+                    "key-rate duration",
+                    "key rate duration",
+                ),
+            ),
+            (
+                5,
+                (
+                    "macaulay duration",
+                    "modified duration",
+                    "z-spread",
+                    "z spread",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="fx-forward-cross-currency",
+        import_path="offline_common.fx",
+        summary=(
+            "Covered-interest-parity FX forwards, bid/ask inversion and "
+            "synthetic crosses, forward points, implied quote-currency "
+            "rates, continuous FX basis, and log-linear forward interpolation."
+        ),
+        api_signatures=(
+            "covered_interest_forward(spot, *, base_rate, quote_rate, base_year_fraction, quote_year_fraction) -> float",
+            "invert_bid_ask(bid, ask) -> tuple[float, float]",
+            "synthetic_cross_bid_ask(*, base_usd_bid, base_usd_ask, quote_usd_bid, quote_usd_ask) -> tuple[float, float, float]",
+            "forward_points(spot, forward, *, pip_multiplier=10000.0) -> float",
+            "implied_quote_rate_from_forward(spot, forward, *, base_rate, base_year_fraction, quote_year_fraction) -> float",
+            "continuous_basis_bps(quoted_forward, cip_forward, year_fraction) -> float",
+            "forward_from_continuous_basis(cip_forward, basis_bps, year_fraction) -> float",
+            "log_linear_forward(spot, node_times, node_forwards, target_time) -> float",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "covered interest rate parity",
+                    "synthetic cross rates",
+                    "synthetic cross rate",
+                ),
+            ),
+            (
+                6,
+                (
+                    "implied foreign yields",
+                    "implied foreign yield",
+                ),
+            ),
+            (
+                6,
+                (
+                    "cross-currency basis",
+                    "cross currency basis",
+                    "broken-date fx forwards",
+                    "broken date fx forwards",
+                ),
+            ),
+            (
+                5,
+                (
+                    "implied basis",
+                    "forward points",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="dual-curve-rate-mechanics",
+        import_path="offline_common.rate_curves",
+        summary=(
+            "Projection-curve forward rates, forward discount factors, "
+            "fixed/floating leg present values, and generic dual-curve "
+            "par-swap-rate calculation."
+        ),
+        api_signatures=(
+            "simple_forward_rate(start_discount_factor, end_discount_factor, accrual) -> float",
+            "forward_discount_factor(anchor_discount_factor, target_discount_factor) -> float",
+            "fixed_leg_annuity(accruals, discount_factors) -> float",
+            "floating_leg_pv_per_unit(forward_rates, accruals, discount_factors) -> float",
+            "par_swap_rate(*, fixed_accruals, fixed_discount_factors, floating_forward_rates, floating_accruals, floating_discount_factors) -> float",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "dual-curve framework",
+                    "dual curve framework",
+                ),
+            ),
+            (
+                5,
+                (
+                    "projection curve",
+                    "projection curves",
+                ),
+            ),
+            (
+                6,
+                (
+                    "forward discount factors",
+                    "forward discount factor",
+                ),
+            ),
         ),
     ),
     CapabilityDescriptor(

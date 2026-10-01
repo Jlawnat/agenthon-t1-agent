@@ -168,6 +168,10 @@ def test_capability_descriptors_are_generic_and_compliance_bounded() -> None:
         "offline_common.volume_scheduling",
         "offline_common.portfolio",
         "offline_common.risk",
+        "offline_common.schedules",
+        "offline_common.bonds",
+        "offline_common.fx",
+        "offline_common.rate_curves",
         "offline_common.statistics",
         "offline_common.volatility",
     }

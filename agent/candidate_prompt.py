@@ -459,9 +459,9 @@ def build_candidate_prompt(
 
     context = json.dumps(
         payload,
-        indent=2,
         ensure_ascii=False,
         default=str,
+        separators=(",", ": "),
     )
 
     prompt = f"""
