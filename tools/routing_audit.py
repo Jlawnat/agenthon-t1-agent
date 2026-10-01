@@ -558,7 +558,7 @@ def main() -> None:
     parser.add_argument(
         "--expected-unit-count",
         type=int,
-        default=87,
+        default=86,
     )
 
     args = parser.parse_args()

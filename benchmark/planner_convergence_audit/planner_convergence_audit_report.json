@@ -1,12 +1,32 @@
 {
-  "units_audited": 87,
-  "expected_units": 87,
+  "units_audited": 86,
+  "expected_units": 86,
   "classification_counts": {
-    "aligned_not_required": 40,
-    "aligned_required": 29,
-    "possible_false_positive": 18
+    "aligned_not_required": 28,
+    "aligned_required": 30,
+    "possible_false_positive": 28
   },
   "review_units": [
+    {
+      "unit_dir": "t1-barrier-garch-var",
+      "task_id": "t1-barrier-garch-var",
+      "category": "cross-domain",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "data-causality",
+        "numerical",
+        "accounting",
+        "cross-domain",
+        "derivatives",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
     {
       "unit_dir": "t1-cliquet-ratchet-pricing",
       "task_id": "t1-cliquet-ratchet-pricing",
@@ -27,7 +47,7 @@
       "unit_dir": "t1-copula-equity-fitting",
       "task_id": "t1-copula-equity-fitting",
       "category": "risk-management",
-      "difficulty": "medium",
+      "difficulty": "hard",
       "review_packs": [
         "software",
         "numerical",
@@ -72,6 +92,42 @@
       "load_error": null
     },
     {
+      "unit_dir": "t1-credit-spread-decomposition",
+      "task_id": "t1-credit-spread-decomposition",
+      "category": "credit-analysis",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "numerical",
+        "credit"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-cta-basel-capital",
+      "task_id": "t1-cta-basel-capital",
+      "category": "cross-domain",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "data-causality",
+        "numerical",
+        "accounting",
+        "cross-domain",
+        "backtesting",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
       "unit_dir": "t1-delta-hedging-pnl-simulation",
       "task_id": "t1-delta-hedging-pnl-simulation",
       "category": "derivatives-pricing",
@@ -91,7 +147,7 @@
       "unit_dir": "t1-digital-barrier-options",
       "task_id": "t1-digital-barrier-options",
       "category": "derivatives-pricing",
-      "difficulty": "medium",
+      "difficulty": "hard",
       "review_packs": [
         "software",
         "numerical",
@@ -171,14 +227,15 @@
       "load_error": null
     },
     {
-      "unit_dir": "t1-historical-var-data-prep",
-      "task_id": "t1-historical-var-data-prep",
-      "category": "risk-management",
-      "difficulty": "medium",
+      "unit_dir": "t1-interest-rate-cap-floor",
+      "task_id": "t1-interest-rate-cap-floor",
+      "category": "pricing",
+      "difficulty": "hard",
       "review_packs": [
         "software",
         "numerical",
-        "risk-management"
+        "fixed-income",
+        "derivatives"
       ],
       "actual_convergence": true,
       "method_signals": [],
@@ -206,7 +263,7 @@
       "unit_dir": "t1-mtm-xccy-basis-desk",
       "task_id": "t1-mtm-xccy-basis-desk",
       "category": "cross-currency-rates",
-      "difficulty": "medium",
+      "difficulty": "hard",
       "review_packs": [
         "software",
         "numerical",
@@ -239,11 +296,108 @@
       "unit_dir": "t1-option-put-call-parity-forward-audit",
       "task_id": "t1-option-put-call-parity-forward-audit",
       "category": "derivatives",
-      "difficulty": "medium",
+      "difficulty": "hard",
       "review_packs": [
         "software",
         "numerical",
         "derivatives"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-realized-vol-estimators",
+      "task_id": "t1-realized-vol-estimators",
+      "category": "cross-domain",
+      "difficulty": "medium",
+      "review_packs": [
+        "software",
+        "data-causality",
+        "numerical",
+        "accounting",
+        "cross-domain",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-regime-cta-vol-target",
+      "task_id": "t1-regime-cta-vol-target",
+      "category": "cross-domain",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "data-causality",
+        "numerical",
+        "accounting",
+        "cross-domain",
+        "backtesting",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-regime-riskparity-cvar",
+      "task_id": "t1-regime-riskparity-cvar",
+      "category": "cross-domain",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "data-causality",
+        "numerical",
+        "accounting",
+        "cross-domain",
+        "backtesting",
+        "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-sentiment-factor-alpha",
+      "task_id": "t1-sentiment-factor-alpha",
+      "category": "cross-domain",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "data-causality",
+        "numerical",
+        "accounting",
+        "cross-domain",
+        "factor-research",
+        "backtesting",
+        "risk-management",
+        "nlp-finance"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-smith-tail-index",
+      "task_id": "t1-smith-tail-index",
+      "category": "extreme-value-theory",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "numerical",
+        "risk-management"
       ],
       "actual_convergence": true,
       "method_signals": [],
@@ -260,6 +414,26 @@
         "software",
         "numerical",
         "risk-management"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-structured-note-risk",
+      "task_id": "t1-structured-note-risk",
+      "category": "cross-domain",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "data-causality",
+        "numerical",
+        "accounting",
+        "cross-domain",
+        "derivatives",
+        "fixed-income"
       ],
       "actual_convergence": true,
       "method_signals": [],
@@ -287,6 +461,22 @@
       "unit_dir": "t1-yield-curve-bond-immunization",
       "task_id": "t1-yield-curve-bond-immunization",
       "category": "fixed-income",
+      "difficulty": "hard",
+      "review_packs": [
+        "software",
+        "numerical",
+        "fixed-income"
+      ],
+      "actual_convergence": true,
+      "method_signals": [],
+      "signal_expected_convergence": false,
+      "classification": "possible_false_positive",
+      "load_error": null
+    },
+    {
+      "unit_dir": "t1-zero-coupon-bootstrapping",
+      "task_id": "t1-zero-coupon-bootstrapping",
+      "category": "pricing",
       "difficulty": "hard",
       "review_packs": [
         "software",

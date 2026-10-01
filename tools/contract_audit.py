@@ -1012,7 +1012,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Audit the frozen Agenthon T1 specification parser "
-            "against the 87-unit public contract inventory."
+            "against the current public contract inventory."
         )
     )
 
@@ -1043,7 +1043,7 @@ def main() -> int:
     parser.add_argument(
         "--expected-unit-count",
         type=int,
-        default=87,
+        default=86,
     )
 
     parser.add_argument(

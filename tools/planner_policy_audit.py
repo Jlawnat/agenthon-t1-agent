@@ -314,7 +314,7 @@ def main() -> int:
     parser.add_argument(
         "--expected-unit-count",
         type=int,
-        default=87,
+        default=86,
     )
 
     parser.add_argument(

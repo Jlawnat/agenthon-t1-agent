@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -76,13 +75,47 @@ class CandidateWorkspaceZeroCopyTests(unittest.TestCase):
                 (data / "sample.csv").resolve(),
             )
 
-            shutil.rmtree(
-                workspace.root_dir
-            )
+            workspace.cleanup()
 
             self.assertTrue(
                 (data / "sample.csv").exists()
             )
+
+    def test_read_only_library_workspace_can_be_deleted_and_recreated(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            task, _ = self._task(root)
+            base_dir = root / "work"
+
+            workspace = CandidateWorkspace.create(
+                base_dir=base_dir,
+                candidate_id=1,
+                task_dir=task,
+            )
+
+            common = workspace.root_dir / "lib" / "offline_common"
+            self.assertEqual(common.stat().st_mode & 0o222, 0)
+
+            workspace.cleanup()
+            self.assertFalse(workspace.root_dir.exists())
+
+            recreated = CandidateWorkspace.create(
+                base_dir=base_dir,
+                candidate_id=1,
+                task_dir=task,
+            )
+
+            try:
+                self.assertTrue(
+                    (recreated.root_dir / "lib" / "qf_primitives.py")
+                    .is_file()
+                )
+            finally:
+                recreated.cleanup()
+
+            self.assertFalse(recreated.root_dir.exists())
 
     def test_dockerfile_rename_creates_legacy_alias(self) -> None:
         with TemporaryDirectory() as directory:
@@ -133,6 +166,44 @@ class CandidateWorkspaceZeroCopyTests(unittest.TestCase):
                 legacy_name.resolve(),
                 (data / "sample.csv").resolve(),
             )
+
+    def test_dockerfile_rename_alias_when_task_data_is_copied(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            task, _ = self._task(
+                root,
+                dockerfile_text=(
+                    "FROM finance-bench-sandbox:latest\n"
+                    "WORKDIR /app\n"
+                    "COPY data/sample.csv "
+                    "/app/data/legacy_name.csv\n"
+                ),
+            )
+
+            with patch(
+                "agent.candidate_workspace."
+                "_task_data_is_effectively_read_only",
+                return_value=False,
+            ):
+                workspace = CandidateWorkspace.create(
+                    base_dir=root / "work",
+                    candidate_id=1,
+                    task_dir=task,
+                )
+
+            try:
+                legacy_name = (
+                    workspace.input_dir
+                    / "data"
+                    / "legacy_name.csv"
+                )
+                self.assertTrue(legacy_name.is_symlink())
+                self.assertEqual(
+                    legacy_name.read_text(encoding="utf-8"),
+                    "x\n1\n2\n",
+                )
+            finally:
+                workspace.cleanup()
 
     def test_source_data_symlinks_are_still_rejected(self) -> None:
         with TemporaryDirectory() as directory:

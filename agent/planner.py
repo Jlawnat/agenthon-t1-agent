@@ -10,6 +10,9 @@ from agent.planning import TaskPlan
 from agent.skill_packs import SkillPack
 
 
+MAX_PLANNER_PROMPT_CHARS = 60_000
+
+
 @dataclass
 class CandidateStrategy:
     candidate_id: int
@@ -69,7 +72,7 @@ def build_planner_prompt(
         default=str,
     )
 
-    return f"""
+    prompt = f"""
 You are the planning component of a quantitative-finance coding agent.
 
 Your job is to design an implementation plan.
@@ -126,3 +129,11 @@ TASK CONTEXT:
 
 {context}
 """.strip()
+
+    if len(prompt) > MAX_PLANNER_PROMPT_CHARS:
+        raise ValueError(
+            "Planner prompt exceeds the configured context ceiling: "
+            f"{len(prompt)} > {MAX_PLANNER_PROMPT_CHARS} characters."
+        )
+
+    return prompt

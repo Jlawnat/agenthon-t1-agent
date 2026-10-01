@@ -1,10 +1,10 @@
 {
   "public_repo": "/home/elliot/track1-coding-public",
-  "inventory_git_commit": "81e3e072f8d93ecbddc5915e38710a6cce61313c",
-  "expected_unit_count": 87,
-  "audited_unit_count": 87,
+  "inventory_git_commit": "1a60fc48024c4f0e9978416d84e8370dbb0236cd",
+  "expected_unit_count": 86,
+  "audited_unit_count": 86,
   "unit_count_matches": true,
-  "hard_contract_pass_count": 87,
+  "hard_contract_pass_count": 86,
   "hard_contract_fail_count": 0,
   "hard_contract_readiness_rate": 1.0,
   "hard_failure_counts": {},
@@ -1854,6 +1854,9 @@
         "t",
         "ret_12_7",
         "ret_lead1m",
+        "r",
+        "n",
+        "k",
         "net_return"
       ],
       "markdown_schema_table_signal": false,
@@ -4013,43 +4016,6 @@
       "nested_json_signal": true,
       "general_schema_signal": false,
       "schema_review_needed": true,
-      "hard_failure_types": [],
-      "hard_contract_pass": true,
-      "load_error": null
-    },
-    {
-      "unit_dir": "t1-polars-api-migration",
-      "task_id_expected": "t1-polars-api-migration",
-      "task_id_actual": "t1-polars-api-migration",
-      "category_expected": "debug-migration",
-      "category_actual": "debug-migration",
-      "timeout_expected": 1800.0,
-      "timeout_actual": 1800.0,
-      "network_expected": "restricted",
-      "network_actual": "restricted",
-      "expected_output_count": 1,
-      "actual_output_count": 1,
-      "expected_output_paths": [
-        "/output/function-under-new-api.py"
-      ],
-      "actual_output_paths": [
-        "/output/function-under-new-api.py"
-      ],
-      "missing_output_paths": [],
-      "extra_output_paths": [],
-      "structured_output_count": 0,
-      "required_output_columns": [],
-      "required_output_dtypes": {},
-      "candidate_schema_fields": [
-        "PolarsInefficientMapWarning",
-        "MapWithoutReturnDtypeWarning",
-        "DeprecationWarning"
-      ],
-      "markdown_schema_table_signal": false,
-      "json_schema_signal": false,
-      "nested_json_signal": false,
-      "general_schema_signal": false,
-      "schema_review_needed": false,
       "hard_failure_types": [],
       "hard_contract_pass": true,
       "load_error": null

@@ -1,7 +1,7 @@
 {
   "repository": "/home/elliot/track1-coding-public",
-  "git_commit": "81e3e072f8d93ecbddc5915e38710a6cce61313c",
-  "unit_count": 87,
+  "git_commit": "1a60fc48024c4f0e9978416d84e8370dbb0236cd",
+  "unit_count": 86,
   "units": [
     {
       "unit_dir": "t1-13f-amendment-aware-crowding",
@@ -18,7 +18,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 8,
       "output_paths": [
@@ -67,7 +68,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -105,7 +107,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -148,7 +151,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 7,
       "output_paths": [
@@ -190,7 +194,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 3,
       "output_paths": [
@@ -229,7 +234,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 6,
       "output_paths": [
@@ -271,7 +277,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -312,7 +319,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 3,
       "output_paths": [
@@ -358,7 +366,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -397,7 +406,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -440,7 +450,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -480,7 +491,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -520,7 +532,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -560,7 +573,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -600,7 +614,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 7,
       "output_paths": [
@@ -645,7 +660,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -686,7 +702,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -727,7 +744,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -763,7 +781,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -803,7 +822,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 8,
       "output_paths": [
@@ -865,7 +885,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 9,
       "output_paths": [
@@ -912,7 +933,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 3,
       "output_paths": [
@@ -954,7 +976,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -990,7 +1013,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -1028,7 +1052,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 6,
       "output_paths": [
@@ -1072,7 +1097,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -1113,7 +1139,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -1157,7 +1184,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -1200,7 +1228,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -1241,7 +1270,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -1277,7 +1307,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 7,
       "output_paths": [
@@ -1319,7 +1350,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -1355,7 +1387,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -1397,7 +1430,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 8,
       "output_paths": [
@@ -1444,7 +1478,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -1490,7 +1525,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -1531,7 +1567,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 3,
       "output_paths": [
@@ -1573,7 +1610,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 8,
       "output_paths": [
@@ -1620,7 +1658,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -1655,7 +1694,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -1696,7 +1736,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -1740,7 +1781,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 7,
       "output_paths": [
@@ -1791,7 +1833,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 13,
       "output_paths": [
@@ -1851,7 +1894,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -1891,7 +1935,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -1931,7 +1976,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -1970,7 +2016,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 7,
       "output_paths": [
@@ -2014,7 +2061,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -2048,7 +2096,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -2084,7 +2133,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -2127,7 +2177,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -2170,7 +2221,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -2211,7 +2263,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -2247,7 +2300,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 6,
       "output_paths": [
@@ -2292,7 +2346,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -2332,7 +2387,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 8,
       "output_paths": [
@@ -2373,7 +2429,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 3,
       "output_paths": [
@@ -2412,7 +2469,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -2453,7 +2511,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 11,
       "output_paths": [
@@ -2503,7 +2562,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 8,
       "output_paths": [
@@ -2568,7 +2628,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -2609,7 +2670,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -2655,7 +2717,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -2695,7 +2758,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -2717,45 +2781,6 @@
       "is_example": false
     },
     {
-      "unit_dir": "t1-polars-api-migration",
-      "task_id": "t1-polars-api-migration",
-      "title": "Polars Api Migration",
-      "split": "public-dev",
-      "category": "debug-migration",
-      "difficulty": "medium",
-      "agent_timeout_sec": 1800.0,
-      "verifier_timeout_sec": 300.0,
-      "cpus": 16,
-      "memory": "128G",
-      "gpu": true,
-      "network": "restricted",
-      "scoring_metric": "pass@k",
-      "k_values": [
-        1
-      ],
-      "output_count": 1,
-      "output_paths": [
-        "/app/output/function-under-new-api.py"
-      ],
-      "output_extensions": [
-        "py"
-      ],
-      "legacy_input_count": 2,
-      "legacy_input_paths": [
-        "/app/data/ticker_data_pilot.csv",
-        "/app/data/function-under-old-api.py"
-      ],
-      "data_file_count": 3,
-      "data_files": [
-        "function-under-old-api.py",
-        "ticker_data_20260309_20260331.csv",
-        "ticker_data_pilot.csv"
-      ],
-      "has_manifest": true,
-      "has_checks": true,
-      "is_example": false
-    },
-    {
       "unit_dir": "t1-prediction-markets-cross-venue-dislocation",
       "task_id": "t1-prediction-markets-cross-venue-dislocation",
       "title": "Prediction Markets Cross Venue Dislocation",
@@ -2770,7 +2795,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -2815,7 +2841,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -2852,7 +2879,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -2893,7 +2921,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -2936,7 +2965,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 3,
       "output_paths": [
@@ -2975,7 +3005,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -3015,7 +3046,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 3,
       "output_paths": [
@@ -3063,7 +3095,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -3110,7 +3143,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -3151,7 +3185,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -3191,7 +3226,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -3234,7 +3270,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -3274,7 +3311,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 5,
       "output_paths": [
@@ -3315,7 +3353,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 10,
       "output_paths": [
@@ -3360,7 +3399,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 2,
       "output_paths": [
@@ -3401,7 +3441,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 7,
       "output_paths": [
@@ -3451,7 +3492,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 4,
       "output_paths": [
@@ -3487,7 +3529,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -3526,7 +3569,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 8,
       "output_paths": [
@@ -3573,7 +3617,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 6,
       "output_paths": [
@@ -3620,7 +3665,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [
@@ -3656,7 +3702,8 @@
       "network": "restricted",
       "scoring_metric": "pass@k",
       "k_values": [
-        1
+        1,
+        3
       ],
       "output_count": 1,
       "output_paths": [

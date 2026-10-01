@@ -68,9 +68,19 @@ def _make_input_read_only(
         reverse=True,
     ):
         if path.is_symlink():
-            raise CandidateWorkspaceError(
-                "Copied input unexpectedly contains a symlink."
-            )
+            try:
+                target = path.resolve(strict=True)
+            except OSError as exc:
+                raise CandidateWorkspaceError(
+                    "Copied input contains an invalid internal alias."
+                ) from exc
+
+            if not _is_within(target, root.resolve()):
+                raise CandidateWorkspaceError(
+                    "Copied input alias escapes the candidate data root."
+                )
+
+            continue
 
         mode = path.stat().st_mode
 
@@ -425,6 +435,32 @@ def _is_within(
     return True
 
 
+def _remove_workspace_tree(
+    root: Path,
+) -> None:
+    """Remove a candidate-owned tree after restoring directory write bits."""
+    if not root.exists():
+        return
+
+    if root.is_symlink():
+        raise CandidateWorkspaceError(
+            "Candidate workspace root must not be a symlink."
+        )
+
+    for path in (root, *root.rglob("*")):
+        if path.is_symlink() or not path.is_dir():
+            continue
+
+        path.chmod(
+            path.stat().st_mode
+            | stat.S_IRUSR
+            | stat.S_IWUSR
+            | stat.S_IXUSR
+        )
+
+    shutil.rmtree(root)
+
+
 @dataclass
 class CandidateWorkspace:
     candidate_id: int
@@ -490,7 +526,7 @@ class CandidateWorkspace:
             )
 
         if root_dir.exists():
-            shutil.rmtree(
+            _remove_workspace_tree(
                 root_dir
             )
 
@@ -630,6 +666,13 @@ class CandidateWorkspace:
                 alias_source_root = (
                     environment_data
                 )
+
+                _apply_legacy_copy_aliases(
+                    task_dir=task_dir,
+                    environment_data=environment_data,
+                    candidate_data=candidate_data,
+                    source_root=alias_source_root,
+                )
             else:
                 shutil.copytree(
                     environment_data,
@@ -638,20 +681,20 @@ class CandidateWorkspace:
                     symlinks=False,
                 )
 
-                _make_input_read_only(
-                    candidate_data
-                )
-
                 alias_source_root = (
                     candidate_data
                 )
 
-            _apply_legacy_copy_aliases(
-                task_dir=task_dir,
-                environment_data=environment_data,
-                candidate_data=candidate_data,
-                source_root=alias_source_root,
-            )
+                _apply_legacy_copy_aliases(
+                    task_dir=task_dir,
+                    environment_data=environment_data,
+                    candidate_data=candidate_data,
+                    source_root=alias_source_root,
+                )
+
+                _make_input_read_only(
+                    candidate_data
+                )
 
         else:
             # Parameter-only tasks are valid Track-1 units. Keep the
@@ -676,6 +719,12 @@ class CandidateWorkspace:
             source_dir=(
                 source_dir.resolve()
             ),
+        )
+
+    def cleanup(self) -> None:
+        """Delete this workspace, including its protected library tree."""
+        _remove_workspace_tree(
+            self.root_dir
         )
 
     def validate_script_path(

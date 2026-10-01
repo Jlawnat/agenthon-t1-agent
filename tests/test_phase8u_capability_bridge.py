@@ -12,7 +12,10 @@ import stat
 import pandas as pd
 import pytest
 
-from agent.candidate_prompt import build_candidate_prompt
+from agent.candidate_prompt import (
+    MAX_CANDIDATE_PROMPT_CHARS,
+    build_candidate_prompt,
+)
 from agent.candidate_runner import run_candidate
 from agent.candidate_workspace import CandidateWorkspace
 from agent.capability_bridge import (
@@ -24,7 +27,10 @@ from agent.capability_bridge import (
     rank_capabilities,
     relevant_primitive_catalog,
 )
-from agent.planner import build_planner_prompt
+from agent.planner import (
+    MAX_PLANNER_PROMPT_CHARS,
+    build_planner_prompt,
+)
 from agent.runtime_adapters import RuntimePlan
 
 
@@ -284,6 +290,82 @@ def test_planner_and_candidate_prompts_prioritize_selected_context(
     )
     assert candidate.index('"relevant_runtime_primitives"') < candidate.index(
         '"available_runtime_primitives"'
+    )
+
+
+def test_candidate_prompt_normalizes_nested_non_json_mapping_keys() -> None:
+    timestamp = pd.Timestamp("2025-01-02T03:04:05")
+    inspections = {
+        "environment/data/events.jsonl": {
+            "categorical": {
+                "event_time": {
+                    "top_values": {
+                        timestamp: {
+                            timestamp: 2,
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    prompt = build_candidate_prompt(
+        instruction_text="Summarize the supplied events.",
+        spec=_Payload({"category": "event-study"}),
+        strategy=_Payload({"approach_name": "contract-first"}),
+        skill_packs=[],
+        data_inspections=inspections,
+    )
+
+    assert '"2025-01-02 03:04:05"' in prompt
+
+
+def test_candidate_prompt_compacts_raw_inspections_to_context_ceiling() -> None:
+    inspections = {
+        f"environment/data/filing_{index:02d}.html": {
+            "chars_at_least": 20_000,
+            "truncated": True,
+            "preview": f"filing-{index}:" + ("x" * 20_000),
+        }
+        for index in range(20)
+    }
+
+    prompt = build_candidate_prompt(
+        instruction_text="Classify all supplied filings.",
+        spec=_Payload({"category": "nlp-on-finance"}),
+        strategy=_Payload(
+            {
+                "approach_name": "contract-first",
+                "implementation_steps": ["x" * 200] * 10,
+                "verification_steps": ["y" * 200] * 10,
+                "risks": ["z" * 200] * 10,
+            }
+        ),
+        skill_packs=[],
+        data_inspections=inspections,
+    )
+
+    assert len(prompt) <= MAX_CANDIDATE_PROMPT_CHARS
+    assert '"chars_at_least": 20000' in prompt
+    assert "[prompt preview truncated]" in prompt
+
+
+def test_prompt_ceilings_reserve_at_least_twenty_percent_headroom() -> None:
+    assumed_context_tokens = 32_768
+    reserved_headroom_tokens = int(assumed_context_tokens * 0.20)
+    conservative_chars_per_token = 3
+
+    assert (
+        MAX_PLANNER_PROMPT_CHARS // conservative_chars_per_token
+        + 3_500
+        + reserved_headroom_tokens
+        <= assumed_context_tokens
+    )
+    assert (
+        MAX_CANDIDATE_PROMPT_CHARS // conservative_chars_per_token
+        + 4_000
+        + reserved_headroom_tokens
+        <= assumed_context_tokens
     )
 
 

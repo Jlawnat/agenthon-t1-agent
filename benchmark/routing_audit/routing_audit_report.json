@@ -1,5 +1,5 @@
 {
-  "units_audited": 87,
+  "units_audited": 86,
   "load_error_count": 0,
   "empty_review_pack_count": 0,
   "category_counts": {
@@ -33,47 +33,45 @@
     "volatility-modeling": 1,
     "stochastic-processes": 1,
     "strategy": 1,
-    "debug-migration": 1,
     "event-driven-analysis, data-processing": 1,
     "extreme-value-theory": 1,
     "statistical-analysis": 1
   },
   "candidate_count_distribution": {
-    "2": 41,
-    "3": 37,
-    "1": 9
+    "3": 49,
+    "2": 37
   },
   "review_pack_counts": {
-    "software": 87,
+    "software": 86,
     "numerical": 72,
     "data-causality": 40,
     "accounting": 32,
+    "derivatives": 25,
+    "risk-management": 21,
     "cross-domain": 20,
-    "derivatives": 19,
-    "risk-management": 13,
-    "factor-research": 11,
-    "fixed-income": 11,
-    "backtesting": 7,
-    "microstructure": 3,
+    "factor-research": 17,
+    "backtesting": 14,
+    "fixed-income": 12,
+    "microstructure": 4,
+    "nlp-finance": 4,
     "credit": 3,
-    "fx": 3,
-    "nlp-finance": 1
+    "fx": 3
   },
   "loaded_skill_pack_counts": {
-    "software": 87,
+    "software": 86,
     "numerical": 72,
     "data-causality": 40,
     "accounting": 32,
+    "derivatives": 25,
+    "risk-management": 21,
     "cross-domain": 20,
-    "derivatives": 19,
-    "risk-management": 13,
-    "factor-research": 11,
-    "fixed-income": 11,
-    "backtesting": 7,
-    "microstructure": 3,
+    "factor-research": 17,
+    "backtesting": 14,
+    "fixed-income": 12,
+    "microstructure": 4,
+    "nlp-finance": 4,
     "credit": 3,
-    "fx": 3,
-    "nlp-finance": 1
+    "fx": 3
   },
   "routes_by_category": {
     "backtesting": [
@@ -136,9 +134,130 @@
           "data-causality",
           "numerical",
           "accounting",
-          "cross-domain"
+          "cross-domain",
+          "derivatives"
         ],
-        "count": 20
+        "count": 4
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "factor-research"
+        ],
+        "count": 3
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "risk-management"
+        ],
+        "count": 3
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "backtesting",
+          "risk-management"
+        ],
+        "count": 3
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "factor-research",
+          "backtesting"
+        ],
+        "count": 1
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "derivatives",
+          "risk-management"
+        ],
+        "count": 1
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "factor-research",
+          "backtesting",
+          "nlp-finance"
+        ],
+        "count": 1
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "backtesting",
+          "microstructure"
+        ],
+        "count": 1
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "nlp-finance"
+        ],
+        "count": 1
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "factor-research",
+          "backtesting",
+          "risk-management",
+          "nlp-finance"
+        ],
+        "count": 1
+      },
+      {
+        "review_packs": [
+          "software",
+          "data-causality",
+          "numerical",
+          "accounting",
+          "cross-domain",
+          "derivatives",
+          "fixed-income"
+        ],
+        "count": 1
       }
     ],
     "cross-sectional-strategies": [
@@ -161,14 +280,6 @@
           "data-causality",
           "accounting",
           "backtesting"
-        ],
-        "count": 1
-      }
-    ],
-    "debug-migration": [
-      {
-        "review_packs": [
-          "software"
         ],
         "count": 1
       }

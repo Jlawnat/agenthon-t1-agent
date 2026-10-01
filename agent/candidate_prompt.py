@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import Any
 
 from agent.capability_bridge import RankedCapability
@@ -8,6 +9,198 @@ from agent.compiled_specification import CompiledSpecification
 from agent.planner import CandidateStrategy
 from agent.qf_primitives import PRIMITIVE_API_CATALOG
 from agent.skill_packs import SkillPack
+
+
+MAX_CANDIDATE_PROMPT_CHARS = 60_000
+_MAX_TOTAL_RAW_PREVIEW_CHARS = 12_000
+_MAX_RAW_PREVIEW_CHARS_PER_FILE = 3_000
+_MAX_SUMMARY_COLUMNS = 24
+_MAX_TOTAL_NUMERIC_SUMMARIES = 12
+_MAX_TOTAL_CATEGORICAL_SUMMARIES = 12
+_MAX_TOP_VALUES = 5
+_MAX_SAMPLE_ROWS = 1
+_MAX_SAMPLE_ROW_COLUMNS = 24
+_MAX_FILES_WITH_SAMPLE_ROWS = 2
+_MAX_ARCHIVE_MEMBERS = 50
+_PROMPT_PREVIEW_SUFFIX = "...[prompt preview truncated]"
+
+
+_JSON_MAPPING_KEY_TYPES = (
+    str,
+    int,
+    float,
+    bool,
+    type(None),
+)
+
+
+def _normalize_inspection_mapping_keys(
+    value: Any,
+) -> Any:
+    """Return an equivalent inspection tree with JSON-safe mapping keys."""
+    if isinstance(value, Mapping):
+        return {
+            (
+                key
+                if isinstance(key, _JSON_MAPPING_KEY_TYPES)
+                else str(key)
+            ): _normalize_inspection_mapping_keys(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, (list, tuple)):
+        return [
+            _normalize_inspection_mapping_keys(item)
+            for item in value
+        ]
+
+    return value
+
+
+def _compact_candidate_data_inspections(
+    inspections: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Bound raw previews and wide summaries while retaining data structure."""
+    normalized = _normalize_inspection_mapping_keys(
+        inspections
+    )
+    compact: dict[str, dict[str, Any]] = {}
+    preview_chars_remaining = _MAX_TOTAL_RAW_PREVIEW_CHARS
+    sample_row_files_remaining = _MAX_FILES_WITH_SAMPLE_ROWS
+    numeric_summaries_remaining = _MAX_TOTAL_NUMERIC_SUMMARIES
+    categorical_summaries_remaining = (
+        _MAX_TOTAL_CATEGORICAL_SUMMARIES
+    )
+
+    def bounded_preview(value: Any) -> str:
+        nonlocal preview_chars_remaining
+        preview = str(value)
+        limit = min(
+            _MAX_RAW_PREVIEW_CHARS_PER_FILE,
+            preview_chars_remaining,
+        )
+        preview_chars_remaining -= min(len(preview), limit)
+
+        if len(preview) <= limit:
+            return preview
+
+        return preview[:limit] + _PROMPT_PREVIEW_SUFFIX
+
+    for raw_path, raw_details in normalized.items():
+        included_sample_rows = False
+        path = str(raw_path)
+        details = dict(raw_details)
+        item: dict[str, Any] = {}
+
+        for key, value in details.items():
+            if key == "preview":
+                item[key] = bounded_preview(value)
+                continue
+
+            if key == "text_previews" and isinstance(value, Mapping):
+                item[key] = {
+                    str(name): bounded_preview(preview)
+                    for name, preview in value.items()
+                    if preview_chars_remaining > 0
+                }
+                continue
+
+            if key == "numeric" and isinstance(value, Mapping):
+                limit = min(
+                    _MAX_SUMMARY_COLUMNS,
+                    numeric_summaries_remaining,
+                )
+                item[key] = dict(
+                    list(value.items())[:limit]
+                )
+                item["numeric_summaries_truncated"] = (
+                    len(value) > limit
+                )
+                numeric_summaries_remaining -= min(len(value), limit)
+                continue
+
+            if key == "categorical" and isinstance(value, Mapping):
+                categorical: dict[str, Any] = {}
+                limit = min(
+                    _MAX_SUMMARY_COLUMNS,
+                    categorical_summaries_remaining,
+                )
+                for name, summary in list(value.items())[:limit]:
+                    if not isinstance(summary, Mapping):
+                        categorical[str(name)] = summary
+                        continue
+
+                    bounded_summary = dict(summary)
+                    top_values = bounded_summary.get("top_values")
+                    if isinstance(top_values, Mapping):
+                        bounded_summary["top_values"] = dict(
+                            list(top_values.items())[:_MAX_TOP_VALUES]
+                        )
+                    categorical[str(name)] = bounded_summary
+
+                item[key] = categorical
+                item["categorical_summaries_truncated"] = (
+                    len(value) > limit
+                )
+                categorical_summaries_remaining -= min(len(value), limit)
+                continue
+
+            if key == "missing" and isinstance(value, Mapping):
+                missing = {
+                    str(name): count
+                    for name, count in value.items()
+                    if count
+                }
+                item[key] = missing
+                item["missing_all_zero"] = bool(value) and not missing
+                continue
+
+            if key == "sample_rows" and isinstance(value, list):
+                if sample_row_files_remaining <= 0:
+                    item[key] = []
+                    item["sample_rows_truncated"] = bool(value)
+                    item["sample_row_columns_truncated"] = False
+                    continue
+
+                sample_rows: list[Any] = []
+                rows_truncated = len(value) > _MAX_SAMPLE_ROWS
+                columns_truncated = False
+
+                for row in value[:_MAX_SAMPLE_ROWS]:
+                    if not isinstance(row, Mapping):
+                        sample_rows.append(row)
+                        continue
+
+                    columns_truncated = (
+                        columns_truncated
+                        or len(row) > _MAX_SAMPLE_ROW_COLUMNS
+                    )
+                    sample_rows.append(
+                        dict(
+                            list(row.items())[:_MAX_SAMPLE_ROW_COLUMNS]
+                        )
+                    )
+
+                item[key] = sample_rows
+                item["sample_rows_truncated"] = rows_truncated
+                item["sample_row_columns_truncated"] = columns_truncated
+                included_sample_rows = bool(value)
+                continue
+
+            if key == "members" and isinstance(value, list):
+                item[key] = value[:_MAX_ARCHIVE_MEMBERS]
+                item["prompt_members_truncated"] = (
+                    len(value) > _MAX_ARCHIVE_MEMBERS
+                )
+                continue
+
+            item[key] = value
+
+        compact[path] = item
+        if included_sample_rows:
+            sample_row_files_remaining -= 1
+
+    return compact
 
 
 def build_precision_guidance(
@@ -253,7 +446,9 @@ def build_candidate_prompt(
             pack.to_dict()
             for pack in skill_packs
         ],
-        "data_inspections": data_inspections,
+        "data_inspections": _compact_candidate_data_inspections(
+            data_inspections
+        ),
         "precision_guidance": build_precision_guidance(
             instruction_text
         ),
@@ -269,7 +464,7 @@ def build_candidate_prompt(
         default=str,
     )
 
-    return f"""
+    prompt = f"""
 You are implementing one candidate solution for a quantitative-finance coding task.
 
 Your output will be saved directly as solver.py and executed.
@@ -373,3 +568,11 @@ TASK CONTEXT:
 {context}
 
 """.strip()
+
+    if len(prompt) > MAX_CANDIDATE_PROMPT_CHARS:
+        raise ValueError(
+            "Candidate prompt exceeds the configured context ceiling: "
+            f"{len(prompt)} > {MAX_CANDIDATE_PROMPT_CHARS} characters."
+        )
+
+    return prompt
