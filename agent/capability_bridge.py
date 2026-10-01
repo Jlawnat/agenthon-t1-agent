@@ -110,6 +110,50 @@ CANDIDATE_LIBRARY_EXPORTS: dict[str, tuple[str, ...]] = {
         "forward_from_continuous_basis",
         "log_linear_forward",
     ),
+    "finite_difference.py": (
+        "FiniteDifferenceOptionSpec",
+        "FiniteDifferenceResult",
+        "crank_nicolson_option",
+        "with_grid_size",
+        "richardson_second_order",
+    ),
+    "monte_carlo_greeks.py": (
+        "MonteCarloEstimate",
+        "mc_estimate",
+        "gbm_paths_from_normals",
+        "finite_difference_greeks",
+        "pathwise_greeks",
+        "likelihood_ratio_greeks",
+    ),
+    "cliquet.py": (
+        "forward_start_atm_call_price",
+        "cliquet_forward_start_prices",
+    ),
+    "lookback_options.py": (
+        "floating_lookback_call",
+        "floating_lookback_put",
+        "fixed_strike_lookback_call",
+    ),
+    "cap_floor.py": (
+        "CapFloorStripResult",
+        "black_caplet",
+        "black_floorlet",
+        "black_cap_floor_strip",
+    ),
+    "variance_swap.py": (
+        "trapezoidal_strike_widths",
+        "variance_swap_fair_variance",
+        "interpolate_at_forward",
+        "variance_swap_pnl",
+    ),
+    "asian_options.py": (
+        "monitoring_times",
+        "geometric_asian_call",
+        "arithmetic_moments",
+        "levy_asian_call",
+        "curran_asian_call",
+        "monte_carlo_asian",
+    ),
     "rate_curves.py": (
         "simple_forward_rate",
         "forward_discount_factor",
@@ -843,6 +887,284 @@ CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
         json_schemas=(
             (frozenset({"maturities", "par_rates"}), 4),
             (frozenset({"maturities", "rates"}), 3),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="finite-difference-options",
+        import_path="offline_common.finite_difference",
+        summary=(
+            "Crank-Nicolson option valuation with European or American "
+            "exercise, PSOR obstacle handling, discrete cash-dividend jumps, "
+            "grid resizing, and second-order Richardson extrapolation."
+        ),
+        api_signatures=(
+            "FiniteDifferenceOptionSpec(...)",
+            "crank_nicolson_option(spec, *, option_type, exercise_type, dividends=None, return_grid=False, return_boundary=False) -> FiniteDifferenceResult",
+            "with_grid_size(spec, *, stock_steps, time_steps) -> FiniteDifferenceOptionSpec",
+            "richardson_second_order(fine, coarse) -> float",
+        ),
+        primitive_names=(
+            "black_scholes_price",
+            "black_scholes_greeks",
+        ),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "crank-nicolson",
+                    "crank nicolson",
+                ),
+            ),
+            (
+                6,
+                (
+                    "psor",
+                    "projected successive over-relaxation",
+                    "projected successive over relaxation",
+                ),
+            ),
+            (
+                5,
+                (
+                    "richardson extrapolation",
+                    "richardson",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="monte-carlo-greeks",
+        import_path="offline_common.monte_carlo_greeks",
+        summary=(
+            "Monte Carlo estimation from supplied normal draws, GBM path "
+            "generation, common-random-number finite-difference Greeks, "
+            "pathwise estimators, likelihood-ratio estimators, and "
+            "Monte Carlo standard errors."
+        ),
+        api_signatures=(
+            "mc_estimate(samples) -> MonteCarloEstimate",
+            "gbm_paths_from_normals(normals, *, spot, rate, dividend_yield, volatility, maturity) -> ndarray",
+            "finite_difference_greeks(normals, **kwargs) -> dict[str, MonteCarloEstimate]",
+            "pathwise_greeks(normals, *, spot, strike, rate, dividend_yield, volatility, maturity, option_type, asian) -> dict[str, MonteCarloEstimate | None]",
+            "likelihood_ratio_greeks(normals, *, spot, strike, rate, dividend_yield, volatility, maturity, option_type, asian) -> dict[str, MonteCarloEstimate | None]",
+        ),
+        primitive_names=(
+            "black_scholes_price",
+            "black_scholes_greeks",
+        ),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "monte carlo greeks",
+                    "monte-carlo greeks",
+                ),
+            ),
+            (
+                6,
+                (
+                    "likelihood ratio",
+                    "likelihood-ratio",
+                ),
+            ),
+            (
+                5,
+                (
+                    "pathwise estimator",
+                    "pathwise estimators",
+                    "pathwise",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="variance-swap-replication",
+        import_path="offline_common.variance_swap",
+        summary=(
+            "Variance-swap static replication using OTM option prices on "
+            "non-uniform strike grids, trapezoidal strike weights, "
+            "forward interpolation, and long variance-swap P&L."
+        ),
+        api_signatures=(
+            "trapezoidal_strike_widths(strikes) -> np.ndarray",
+            "variance_swap_fair_variance(strikes, otm_option_prices, *, risk_free_rate, maturity) -> float",
+            "interpolate_at_forward(lower_strike, upper_strike, lower_value, upper_value, forward_price) -> float",
+            "variance_swap_pnl(realized_volatility, fair_variance, *, variance_notional=1.0) -> float",
+        ),
+        primitive_names=(
+            "implied_volatility_black_scholes",
+        ),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "variance swap",
+                    "variance-swap",
+                ),
+            ),
+            (
+                6,
+                (
+                    "log-contract replication",
+                    "log contract replication",
+                ),
+            ),
+            (
+                5,
+                (
+                    "trapezoidal strike",
+                    "non-uniform strike grid",
+                    "non uniform strike grid",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="interest-rate-cap-floor",
+        import_path="offline_common.cap_floor",
+        summary=(
+            "Black-model caplet and floorlet pricing, immediate-fixing "
+            "intrinsic handling, cap/floor strip aggregation, and "
+            "cap-floor parity against the corresponding swap value."
+        ),
+        api_signatures=(
+            "black_caplet(*, forward_rate, strike, volatility, fixing_time, discount_factor, accrual, notional=1.0) -> float",
+            "black_floorlet(*, forward_rate, strike, volatility, fixing_time, discount_factor, accrual, notional=1.0) -> float",
+            "black_cap_floor_strip(forward_rates, discount_factors, *, strike, volatility, accrual, notional=1.0) -> CapFloorStripResult",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "interest rate cap and floor",
+                    "interest-rate cap and floor",
+                ),
+            ),
+            (
+                6,
+                (
+                    "black's model",
+                    "blacks model",
+                ),
+            ),
+            (
+                6,
+                (
+                    "floorlet",
+                    "floorlets",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="lookback-option-pricing",
+        import_path="offline_common.lookback_options",
+        summary=(
+            "Closed-form pricing for floating-strike lookback calls and puts "
+            "and fixed-strike lookback calls using running extrema."
+        ),
+        api_signatures=(
+            "floating_lookback_call(*, spot, running_min, maturity, risk_free_rate, dividend_yield, volatility) -> float",
+            "floating_lookback_put(*, spot, running_max, maturity, risk_free_rate, dividend_yield, volatility) -> float",
+            "fixed_strike_lookback_call(*, spot, running_max, strike, maturity, risk_free_rate, dividend_yield, volatility) -> float",
+        ),
+        primitive_names=(
+            "black_scholes_price",
+        ),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "lookback option",
+                    "lookback options",
+                ),
+            ),
+            (
+                6,
+                (
+                    "floating-strike lookback",
+                    "floating strike lookback",
+                ),
+            ),
+            (
+                6,
+                (
+                    "fixed-strike lookback",
+                    "fixed strike lookback",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="asian-option-approximations",
+        import_path="offline_common.asian_options",
+        summary=(
+            "Discrete-monitoring Asian-option calculations including "
+            "geometric-average pricing, arithmetic-average moments, "
+            "Levy and Curran approximations, and Monte Carlo estimates."
+        ),
+        api_signatures=(
+            "monitoring_times(T, n_monitoring) -> np.ndarray",
+            "geometric_asian_call(*, S0, K, T, r, sigma, n_monitoring) -> float",
+            "arithmetic_moments(*, S0, T, r, sigma, n_monitoring) -> tuple[float, float]",
+            "levy_asian_call(*, S0, K, T, r, sigma, n_monitoring) -> float",
+            "curran_asian_call(*, S0, K, T, r, sigma, n_monitoring) -> float",
+            "monte_carlo_asian(*, S0, strikes, T, r, sigma, n_monitoring, n_paths, rng) -> list[tuple[float, float, float]]",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "levy asian",
+                    "levy approximation",
+                ),
+            ),
+            (
+                6,
+                (
+                    "curran asian",
+                    "curran approximation",
+                ),
+            ),
+            (
+                5,
+                (
+                    "geometric asian",
+                    "arithmetic asian",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="cliquet-forward-start-pricing",
+        import_path="offline_common.cliquet",
+        summary=(
+            "Forward-start at-the-money call valuation and decomposition "
+            "of a cliquet into reset-period forward-start option pieces."
+        ),
+        api_signatures=(
+            "forward_start_atm_call_price(*, spot, rate, dividend_yield, volatility, start, end) -> float",
+            "cliquet_forward_start_prices(*, spot, rate, dividend_yield, volatility, maturity, resets) -> np.ndarray",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "cliquet",
+                ),
+            ),
+            (
+                6,
+                (
+                    "forward-start option",
+                    "forward start option",
+                    "forward-start options",
+                    "forward start options",
+                ),
+            ),
         ),
     ),
     CapabilityDescriptor(

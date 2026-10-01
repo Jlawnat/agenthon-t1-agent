@@ -169,10 +169,17 @@ def test_capability_descriptors_are_generic_and_compliance_bounded() -> None:
         "offline_common.portfolio",
         "offline_common.risk",
         "offline_common.schedules",
+        "offline_common.asian_options",
         "offline_common.bonds",
+        "offline_common.cap_floor",
+        "offline_common.cliquet",
         "offline_common.fx",
+        "offline_common.lookback_options",
+        "offline_common.finite_difference",
+        "offline_common.monte_carlo_greeks",
         "offline_common.rate_curves",
         "offline_common.statistics",
+        "offline_common.variance_swap",
         "offline_common.volatility",
     }
 
