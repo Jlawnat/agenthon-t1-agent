@@ -146,6 +146,69 @@ CANDIDATE_LIBRARY_EXPORTS: dict[str, tuple[str, ...]] = {
         "interpolate_at_forward",
         "variance_swap_pnl",
     ),
+    "copula_fitting.py": (
+        "gaussian_copula_loglik",
+        "student_t_copula_loglik",
+        "clayton_copula_loglik",
+        "gumbel_copula_loglik",
+        "kendall_tau_to_gaussian_rho",
+        "fit_student_t_degrees_of_freedom",
+        "empirical_tail_dependence",
+    ),
+    "credit_migration.py": (
+        "TransitionHomogeneityResult",
+        "pooled_transition_matrix",
+        "cumulative_target_probabilities",
+        "transition_homogeneity_test",
+        "continuous_time_generator",
+    ),
+    "first_passage.py": (
+        "upper_first_passage_cdf",
+        "lower_first_passage_cdf",
+        "expected_upper_first_passage_time",
+        "expected_lower_first_passage_time",
+    ),
+    "merton_jump_diffusion.py": (
+        "MertonJumpCalibration",
+        "merton_jump_negative_log_likelihood",
+        "calibrate_merton_jump_diffusion",
+        "merton_call_price",
+        "merton_total_volatility",
+    ),
+    "ou_jump.py": (
+        "OuAr1Fit",
+        "JumpResidualFit",
+        "OuJumpMoments",
+        "fit_ou_ar1",
+        "ou_diffusion_volatility",
+        "fit_residual_jumps",
+        "ou_jump_conditional_moments",
+        "ou_jump_stationary_moments",
+        "lognormal_moments",
+    ),
+    "regime_black_litterman.py": (
+        "GaussianHmm2StateResult",
+        "RegimeCovarianceResult",
+        "BlackLittermanResult",
+        "fit_two_state_gaussian_hmm",
+        "hard_regime_covariances",
+        "black_litterman_posterior",
+    ),
+    "factor_portfolio.py": (
+        "FactorNeutralPortfolio",
+        "factor_exposures",
+        "minimum_norm_factor_neutral_hedge",
+        "annualized_sharpe_ratio",
+        "residual_variance_r_squared",
+    ),
+    "intraday_variation.py": (
+        "realized_variance",
+        "bandi_russell_noise_variance",
+        "additive_noise_corrected_variance",
+        "bipower_variation",
+        "periodic_sampling_mask",
+        "annualized_volatility_from_variance",
+    ),
     "asian_options.py": (
         "monitoring_times",
         "geometric_asian_call",
@@ -973,6 +1036,305 @@ CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
                     "pathwise estimator",
                     "pathwise estimators",
                     "pathwise",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="intraday-realized-variation",
+        import_path="offline_common.intraday_variation",
+        summary=(
+            "Intraday realized-variance utilities including "
+            "Bandi-Russell microstructure-noise estimation, "
+            "additive noise correction, bipower variation, "
+            "periodic sampling masks, and annualized volatility."
+        ),
+        api_signatures=(
+            "realized_variance(log_returns) -> float",
+            "bandi_russell_noise_variance(log_returns) -> float",
+            "additive_noise_corrected_variance(realized_variance_value, *, n_returns, noise_variance) -> float",
+            "bipower_variation(log_returns) -> float",
+            "periodic_sampling_mask(offsets, *, frequency) -> ndarray",
+            "annualized_volatility_from_variance(variance, *, periods_per_year, clip_negative=True) -> float",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "bandi-russell",
+                    "bandi russell",
+                ),
+            ),
+            (
+                6,
+                (
+                    "bipower variation",
+                ),
+            ),
+            (
+                6,
+                (
+                    "volatility signature",
+                ),
+            ),
+            (
+                6,
+                (
+                    "microstructure-noise correction",
+                    "microstructure noise correction",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="pca-factor-neutral-portfolio",
+        import_path="offline_common.factor_portfolio",
+        summary=(
+            "Factor exposure measurement and minimum-norm "
+            "factor-neutral portfolio hedging from PCA component "
+            "loadings, plus Sharpe and residual-variance diagnostics."
+        ),
+        api_signatures=(
+            "factor_exposures(components, weights) -> ndarray",
+            "minimum_norm_factor_neutral_hedge(components, target_weights, *, dollar_neutral_hedge=True) -> FactorNeutralPortfolio",
+            "annualized_sharpe_ratio(returns, *, periods_per_year) -> float",
+            "residual_variance_r_squared(residual_returns, benchmark_returns, *, ddof=0) -> float",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "pca factor portfolio construction",
+                    "pca factor portfolio",
+                ),
+            ),
+            (
+                6,
+                (
+                    "factor-neutral portfolio",
+                    "factor neutral portfolio",
+                ),
+            ),
+            (
+                6,
+                (
+                    "target_factor_exposures",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="regime-black-litterman",
+        import_path="offline_common.regime_black_litterman",
+        summary=(
+            "Two-state Gaussian Hidden Markov Model fitting with Baum-Welch, "
+            "hard regime-conditional covariance estimation, and "
+            "Black-Litterman posterior portfolio construction."
+        ),
+        api_signatures=(
+            "fit_two_state_gaussian_hmm(observations, *, initial_probabilities, transition_matrix, max_iterations=100, tolerance=1e-8) -> GaussianHmm2StateResult",
+            "hard_regime_covariances(returns, posterior_probabilities, *, bull_state, threshold=0.5, minimum_observations=11) -> RegimeCovarianceResult",
+            "black_litterman_posterior(covariance, market_weights, *, risk_aversion, tau, view_matrix, view_returns, view_covariance, normalize_gross=True) -> BlackLittermanResult",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "black-litterman",
+                    "black litterman",
+                ),
+            ),
+            (
+                6,
+                (
+                    "baum-welch",
+                    "baum welch",
+                ),
+            ),
+            (
+                6,
+                (
+                    "regime-aware black-litterman",
+                    "regime aware black-litterman",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="ou-jump-mean-reversion",
+        import_path="offline_common.ou_jump",
+        summary=(
+            "Ornstein-Uhlenbeck mean-reversion with compound Poisson jumps: "
+            "AR(1) calibration, continuous diffusion volatility, residual "
+            "jump estimation, conditional and stationary moments, and "
+            "lognormal level moments for log-state models."
+        ),
+        api_signatures=(
+            "fit_ou_ar1(levels, *, dt) -> OuAr1Fit",
+            "ou_diffusion_volatility(residual_std, *, kappa, slope) -> float",
+            "fit_residual_jumps(residuals, *, dt, threshold_std=3.0) -> JumpResidualFit",
+            "ou_jump_conditional_moments(*, initial_level, horizon, kappa, theta, diffusion_volatility, jump_intensity=0.0, jump_mean=0.0, jump_volatility=0.0) -> OuJumpMoments",
+            "ou_jump_stationary_moments(*, kappa, theta, diffusion_volatility, jump_intensity=0.0, jump_mean=0.0, jump_volatility=0.0) -> OuJumpMoments",
+            "lognormal_moments(normal_mean, normal_variance) -> tuple[float, float]",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "ou process with jumps",
+                    "ou process with poisson jumps",
+                ),
+            ),
+            (
+                6,
+                (
+                    "geometric mean-reverting jump-diffusion",
+                    "geometric mean reverting jump-diffusion",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="merton-jump-diffusion",
+        import_path="offline_common.merton_jump_diffusion",
+        summary=(
+            "Merton jump-diffusion likelihood calibration and European "
+            "call pricing via the Poisson-mixture series, including total "
+            "diffusion-plus-jump volatility."
+        ),
+        api_signatures=(
+            "merton_jump_negative_log_likelihood(log_returns, *, dt, drift, diffusion_volatility, jump_intensity, jump_mean, jump_volatility, max_jumps=15) -> float",
+            "calibrate_merton_jump_diffusion(log_returns, *, dt, drift, bounds, restarts=8, seed=0, max_jumps=15) -> MertonJumpCalibration",
+            "merton_call_price(*, spot, strike, rate, maturity, diffusion_volatility, jump_intensity, jump_mean, jump_volatility, n_terms=50) -> float",
+            "merton_total_volatility(diffusion_volatility, jump_intensity, jump_mean, jump_volatility) -> float",
+        ),
+        primitive_names=(
+            "black_scholes_price",
+            "implied_volatility_black_scholes",
+        ),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "merton jump-diffusion",
+                    "merton jump diffusion",
+                ),
+            ),
+            (
+                6,
+                (
+                    "merton series formula",
+                    "poisson-weighted mixture",
+                    "poisson weighted mixture",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="brownian-first-passage",
+        import_path="offline_common.first_passage",
+        summary=(
+            "First-passage probabilities and expected hitting times for "
+            "drifted Brownian motion, with upper and lower barriers."
+        ),
+        api_signatures=(
+            "upper_first_passage_cdf(drift, volatility, time, barrier) -> float",
+            "lower_first_passage_cdf(drift, volatility, time, barrier) -> float",
+            "expected_upper_first_passage_time(drift, barrier) -> float",
+            "expected_lower_first_passage_time(drift, barrier) -> float",
+        ),
+        primitive_names=(
+            "brownian_running_max_hit_probability",
+            "brownian_running_min_hit_probability",
+            "brownian_joint_terminal_max_cdf",
+            "historical_log_return_calibration",
+        ),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "first passage time",
+                    "first-passage time",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="credit-migration-transition-matrix",
+        import_path="offline_common.credit_migration",
+        summary=(
+            "Credit-state transition analysis with pooled cohort matrices, "
+            "multi-horizon target-state probabilities, chi-square transition "
+            "homogeneity testing, and repaired continuous-time generators."
+        ),
+        api_signatures=(
+            "pooled_transition_matrix(cohort_counts, *, absorbing_index=None) -> tuple[np.ndarray, np.ndarray]",
+            "cumulative_target_probabilities(transition_matrix, *, target_index, horizons, source_indices=None) -> dict[int, np.ndarray]",
+            "transition_homogeneity_test(cohort_counts, *, origin_index, min_destination_total=5.0, alpha=0.05) -> TransitionHomogeneityResult",
+            "continuous_time_generator(transition_matrix, *, absorbing_index=None) -> np.ndarray",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "credit rating migration",
+                    "rating migration matrix",
+                ),
+            ),
+            (
+                6,
+                (
+                    "cumulative default probabilities",
+                    "cumulative default probability",
+                ),
+            ),
+            (
+                6,
+                (
+                    "continuous-time generator matrix",
+                    "continuous time generator matrix",
+                ),
+            ),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="copula-dependence-fitting",
+        import_path="offline_common.copula_fitting",
+        summary=(
+            "Likelihood evaluation for Gaussian, Student-t, Clayton and "
+            "Gumbel copulas, Kendall-tau dependence conversion, Student-t "
+            "degrees-of-freedom fitting, and empirical tail dependence."
+        ),
+        api_signatures=(
+            "gaussian_copula_loglik(u1, u2, rho) -> float",
+            "student_t_copula_loglik(u1, u2, rho, degrees_of_freedom) -> float",
+            "clayton_copula_loglik(u1, u2, theta) -> float",
+            "gumbel_copula_loglik(u1, u2, theta) -> float",
+            "kendall_tau_to_gaussian_rho(kendall_tau) -> float",
+            "fit_student_t_degrees_of_freedom(u1, u2, *, rho, lower=2.1, upper=100.0) -> float",
+            "empirical_tail_dependence(u1, u2, *, quantile=0.95) -> tuple[float, float]",
+        ),
+        primitive_names=(
+            "pseudo_observations",
+        ),
+        semantic_terms=(
+            (
+                6,
+                (
+                    "copula fitting",
+                    "fit copulas",
+                ),
+            ),
+            (
+                6,
+                (
+                    "pseudo-observations",
+                    "pseudo observations",
                 ),
             ),
         ),
