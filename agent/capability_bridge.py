@@ -309,6 +309,44 @@ CANDIDATE_LIBRARY_EXPORTS: dict[str, tuple[str, ...]] = {
         "load_xbrl_zip_facts",
         "facts_by_concept",
     ),
+    "corporate_actions.py": (
+        "AdjustmentResult",
+        "parse_split_ratio",
+        "backward_adjust_prices",
+    ),
+    "lead_lag.py": (
+        "LeadLagResult",
+        "lagged_correlation",
+        "lead_lag_result",
+        "pairwise_lead_lag",
+        "fit_market_models",
+        "market_model_residuals",
+    ),
+    "etf_pressure.py": (
+        "parse_financial_amount",
+        "parse_percentage",
+        "select_top_holdings",
+        "reconcile_constituent_price",
+        "redemption_pressure",
+        "concentration_hhi",
+    ),
+    "attribution.py": (
+        "BrinsonEffects",
+        "brinson_fachler_effects",
+        "drift_weights",
+        "compound_returns",
+    ),
+    "multimodal.py": (
+        "normalize_cross_section",
+        "signed_component_score",
+        "fuse_committee_scores",
+        "reference_vintage_disagreement",
+    ),
+    "process_selection.py": (
+        "ReturnProcessSelection",
+        "gaussian_negative_log_likelihood",
+        "select_return_process",
+    ),
 }
 CANDIDATE_LIBRARY_FILENAMES = (
     "__init__.py",
@@ -384,6 +422,129 @@ class RankedCapability:
 
 
 CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
+    CapabilityDescriptor(
+        capability_id="corporate-action-adjustments",
+        import_path="offline_common.corporate_actions",
+        summary=(
+            "Chronological backward adjustment of price and volume histories "
+            "for splits and cash distributions."
+        ),
+        api_signatures=(
+            "AdjustmentResult(prices, actions_applied, cumulative_price_factor, cumulative_volume_factor, total_cash_distributions)",
+            "parse_split_ratio(value) -> float",
+            "backward_adjust_prices(prices, actions, *, date_column='date', close_column='close', volume_column='volume') -> AdjustmentResult",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (6, ("corporate action", "corporate-action")),
+            (2, ("stock split", "cash dividend")),
+            (2, ("backward-adjusted", "backward adjusted", "fully adjusted price")),
+        ),
+        csv_schemas=((frozenset({"date", "close", "volume"}), 3),),
+    ),
+    CapabilityDescriptor(
+        capability_id="cross-asset-lead-lag",
+        import_path="offline_common.lead_lag",
+        summary=(
+            "Lagged-correlation asymmetry, Fisher-z significance, pair ranking, "
+            "and reusable fitted market-model residualization."
+        ),
+        api_signatures=(
+            "LeadLagResult(first, second, correlations, positive_peak, negative_peak, asymmetry, leader, lagger, fisher_delta_z, significant)",
+            "lagged_correlation(first, second, lag) -> float",
+            "lead_lag_result(first, second, *, first_name, second_name, max_lag, z_critical=1.959963984540054) -> LeadLagResult",
+            "pairwise_lead_lag(returns, *, max_lag) -> list[LeadLagResult]",
+            "fit_market_models(returns, benchmark) -> dict[str, dict[str, float]]",
+            "market_model_residuals(returns, models, benchmark) -> DataFrame",
+        ),
+        primitive_names=("ols_with_intercept",),
+        semantic_terms=(
+            (6, ("cross-asset lead-lag", "cross asset lead lag", "lead-lag discovery")),
+            (4, ("lagged correlation asymmetry", "fisher z")),
+            (3, ("market model residual", "residual lead-lag", "residual lead lag")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="etf-redemption-pressure",
+        import_path="offline_common.etf_pressure",
+        summary=(
+            "ETF holdings selection, workbook number normalization, implied-price "
+            "reconciliation, redemption sales, and constituent concentration."
+        ),
+        api_signatures=(
+            "parse_financial_amount(value) -> float",
+            "parse_percentage(value) -> float",
+            "select_top_holdings(holdings, *, count, ticker_column='ticker', weight_column='weight') -> DataFrame",
+            "reconcile_constituent_price(shares, weights, fund_assets) -> float",
+            "redemption_pressure(holding_shares, holding_dollars, redemption_rates) -> dict[str, ndarray]",
+            "concentration_hhi(values) -> float",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (6, ("etf overlap-aware redemption", "etf overlap aware redemption", "redemption pressure")),
+            (4, ("cross-fund overlap", "constituent sales")),
+            (3, ("top holdings", "fund-flow bridge", "fund flow bridge")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="brinson-fachler-attribution",
+        import_path="offline_common.attribution",
+        summary=(
+            "Brinson-Fachler allocation, selection, and interaction effects, "
+            "portfolio-weight drift, and simple-return compounding."
+        ),
+        api_signatures=(
+            "BrinsonEffects(allocation, selection, interaction)",
+            "brinson_fachler_effects(portfolio_weights, benchmark_weights, portfolio_returns, benchmark_returns) -> BrinsonEffects",
+            "drift_weights(weights, returns) -> ndarray",
+            "compound_returns(returns) -> float",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (7, ("brinson-fachler", "brinson fachler")),
+            (4, ("allocation effect", "selection effect", "interaction effect")),
+            (3, ("sector attribution",)),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="multimodal-committee-fusion",
+        import_path="offline_common.multimodal",
+        summary=(
+            "Cross-sectional feature normalization, signed component aggregation, "
+            "committee disagreement penalties, and as-of reference-vintage audits."
+        ),
+        api_signatures=(
+            "normalize_cross_section(values) -> ndarray",
+            "signed_component_score(feature_columns, signs) -> ndarray",
+            "fuse_committee_scores(agent_scores, weights, *, disagreement_penalty) -> dict[str, ndarray]",
+            "reference_vintage_disagreement(first, second, *, asof_date, stale_after_days) -> dict[str, float | int]",
+        ),
+        primitive_names=("normalize_cross_section",),
+        semantic_terms=(
+            (6, ("multimodal alpha fusion", "quantamental alpha")),
+            (4, ("committee disagreement", "four-agent", "four agent")),
+            (3, ("reference vintage", "vendor bulletin", "gdelt")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="return-process-selection",
+        import_path="offline_common.process_selection",
+        summary=(
+            "AIC selection among martingale, GBM, OU, and jump-diffusion return "
+            "models with forecasts and gap-based conviction."
+        ),
+        api_signatures=(
+            "ReturnProcessSelection(selected_process, parameters, aic, expected_return, sign, conviction, history_count)",
+            "gaussian_negative_log_likelihood(observations, mean, sigma, *, sigma_floor=1e-6) -> float",
+            "select_return_process(returns, *, minimum_history, holding_period_days, conviction_scale, jump_threshold_sigma) -> ReturnProcessSelection",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (6, ("stochastic-process model-selection", "stochastic process model selection", "return process selection")),
+            (4, ("martingale, gbm, ou", "merton-style jump-diffusion", "merton jump diffusion")),
+            (3, ("process conviction", "aic gap")),
+        ),
+    ),
     CapabilityDescriptor(
         capability_id="earnings-surprise-statistics",
         import_path="offline_common.earnings",

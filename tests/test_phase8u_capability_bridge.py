@@ -194,6 +194,12 @@ def test_capability_descriptors_are_generic_and_compliance_bounded() -> None:
         "offline_common.holdings",
         "offline_common.ownership",
         "offline_common.xbrl",
+        "offline_common.corporate_actions",
+        "offline_common.lead_lag",
+        "offline_common.etf_pressure",
+        "offline_common.attribution",
+        "offline_common.multimodal",
+        "offline_common.process_selection",
     }
 
     forbidden_fragments = (
