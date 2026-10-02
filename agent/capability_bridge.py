@@ -272,6 +272,43 @@ CANDIDATE_LIBRARY_EXPORTS: dict[str, tuple[str, ...]] = {
         "estimator_arrays",
         "efficiency_ratios",
     ),
+    "earnings.py": (
+        "EarningsSurprise",
+        "earnings_surprise",
+        "aggregate_earnings_surprises",
+    ),
+    "sec_filings.py": (
+        "html_to_text",
+        "extract_sec_event_date",
+        "extract_sec_item_numbers",
+        "money_to_millions",
+        "revenue_guidance_midpoint_millions",
+        "classify_executive_departure",
+        "extract_debt_principal_millions",
+        "event_alpha_score",
+    ),
+    "holdings.py": (
+        "AmendmentResolution",
+        "resolve_amendment_sequence",
+        "clean_long_holdings",
+        "concentration_metrics",
+        "portfolio_turnover",
+        "weighted_overlap",
+        "aggregate_crowding",
+    ),
+    "ownership.py": (
+        "Form4Transaction",
+        "parse_price_range",
+        "normalize_ownership_entity",
+        "parse_form4_transactions",
+        "sale_pressure_ratios",
+    ),
+    "xbrl.py": (
+        "XbrlFact",
+        "parse_xbrl_facts",
+        "load_xbrl_zip_facts",
+        "facts_by_concept",
+    ),
 }
 CANDIDATE_LIBRARY_FILENAMES = (
     "__init__.py",
@@ -347,6 +384,114 @@ class RankedCapability:
 
 
 CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
+    CapabilityDescriptor(
+        capability_id="earnings-surprise-statistics",
+        import_path="offline_common.earnings",
+        summary=(
+            "Raw and percentage earnings surprises, standardized unexpected "
+            "earnings, year-over-year growth, classification, and aggregation."
+        ),
+        api_signatures=(
+            "EarningsSurprise(surprise_dollars, surprise_pct, sue, yoy_growth, classification)",
+            "earnings_surprise(actual_eps, consensus_estimate, std_estimate, prior_year_eps, *, threshold_pct=2.0) -> EarningsSurprise",
+            "aggregate_earnings_surprises(observations) -> dict[str, float]",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (5, ("earnings surprise",)),
+            (4, ("standardized unexpected earnings", "sue calculator")),
+        ),
+        json_schemas=((frozenset({"companies"}), 3),),
+    ),
+    CapabilityDescriptor(
+        capability_id="sec-filing-event-extraction",
+        import_path="offline_common.sec_filings",
+        summary=(
+            "Visible-text conversion and structured extraction of SEC event "
+            "dates, item numbers, guidance, executive departures, and debt amounts."
+        ),
+        api_signatures=(
+            "html_to_text(source) -> str",
+            "extract_sec_event_date(text) -> str",
+            "extract_sec_item_numbers(text) -> tuple[str, ...]",
+            "money_to_millions(value) -> float",
+            "revenue_guidance_midpoint_millions(text) -> float",
+            "classify_executive_departure(text) -> str",
+            "extract_debt_principal_millions(text) -> float",
+            "event_alpha_score(base_score, severity_multiplier, liquidity_multiplier) -> float",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (6, ("8-k event", "8 k event", "sec 8-k", "sec 8 k")),
+            (4, ("guidance raise", "guidance cut", "executive departure", "debt financing")),
+            (3, ("event alpha", "filing signals")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="amendment-aware-holdings",
+        import_path="offline_common.holdings",
+        summary=(
+            "Amendment-state resolution, long-share cleaning, concentration, "
+            "turnover, weighted overlap, and security crowding."
+        ),
+        api_signatures=(
+            "AmendmentResolution(accession, action, effective_accessions)",
+            "resolve_amendment_sequence(filings) -> list[AmendmentResolution]",
+            "clean_long_holdings(frame) -> tuple[DataFrame, dict[str, int]]",
+            "concentration_metrics(weights) -> dict[str, float]",
+            "portfolio_turnover(previous, current) -> float",
+            "weighted_overlap(first, second) -> float",
+            "aggregate_crowding(holdings, *, owner_column='owner') -> DataFrame",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (6, ("13f amendment", "13f amendment-aware", "13f amendment aware")),
+            (4, ("effective holdings", "filing reconstruction")),
+            (3, ("portfolio crowding", "weighted overlap")),
+        ),
+        csv_schemas=((frozenset({"accession_number", "cusip", "sshprnamt", "value"}), 3),),
+    ),
+    CapabilityDescriptor(
+        capability_id="form4-ownership-sales",
+        import_path="offline_common.ownership",
+        summary=(
+            "Form 4 non-derivative transaction parsing, ownership-bucket "
+            "normalization, reported price bands, and liquidity-scaled sale pressure."
+        ),
+        api_signatures=(
+            "Form4Transaction(transaction_date, security_title, transaction_code, shares, price_per_share, shares_following, ownership_form, ownership_nature, footnote_ids)",
+            "parse_price_range(text) -> tuple[float, float, float] | None",
+            "normalize_ownership_entity(ownership_form, nature, footnote_texts=()) -> str",
+            "parse_form4_transactions(xml_source, *, transaction_codes=('S',)) -> list[Form4Transaction]",
+            "sale_pressure_ratios(shares_sold, gross_proceeds, inventory_before, adv20_shares, close_price) -> dict[str, float]",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (6, ("form 4", "form4")),
+            (4, ("non-derivative sale", "non derivative sale", "insider sale")),
+            (3, ("sale pressure", "ownership bucket")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="xbrl-fact-parsing",
+        import_path="offline_common.xbrl",
+        summary=(
+            "Inline and instance XBRL fact parsing from documents or filing archives, "
+            "including scale, sign, context, unit, and concept selection."
+        ),
+        api_signatures=(
+            "XbrlFact(concept, value, context_ref, unit_ref, decimals)",
+            "parse_xbrl_facts(source) -> list[XbrlFact]",
+            "load_xbrl_zip_facts(path) -> list[XbrlFact]",
+            "facts_by_concept(facts, concept) -> list[XbrlFact]",
+        ),
+        primitive_names=(),
+        semantic_terms=(
+            (6, ("xbrl", "inline xbrl")),
+            (4, ("10-k report", "10 k report", "sec 10-k", "sec 10 k")),
+            (3, ("fundamental metric extraction", "financial report extraction")),
+        ),
+    ),
     CapabilityDescriptor(
         capability_id="causal-portfolio-execution",
         import_path="offline_common.execution",

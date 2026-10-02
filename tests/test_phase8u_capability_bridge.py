@@ -189,6 +189,11 @@ def test_capability_descriptors_are_generic_and_compliance_bounded() -> None:
         "offline_common.statistics",
         "offline_common.variance_swap",
         "offline_common.volatility",
+        "offline_common.earnings",
+        "offline_common.sec_filings",
+        "offline_common.holdings",
+        "offline_common.ownership",
+        "offline_common.xbrl",
     }
 
     forbidden_fragments = (
