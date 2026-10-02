@@ -347,6 +347,54 @@ CANDIDATE_LIBRARY_EXPORTS: dict[str, tuple[str, ...]] = {
         "gaussian_negative_log_likelihood",
         "select_return_process",
     ),
+    "vanilla_options.py": (
+        "BlackScholesGreeks",
+        "ParityForward",
+        "black_scholes_greeks",
+        "black_scholes_pde_residual",
+        "implied_volatility_newton",
+        "brenner_subrahmanyam_atm",
+        "li_atm",
+        "li_non_atm",
+        "corrado_miller_hallerbach",
+        "put_call_parity_forward",
+    ),
+    "american_options.py": (
+        "barone_adesi_whaley",
+        "crr_american_option",
+        "geske_compound_option",
+        "simple_chooser_option",
+    ),
+    "digital_options.py": (
+        "cash_or_nothing",
+        "asset_or_nothing",
+        "gap_option",
+        "reflected_barrier_binary",
+    ),
+    "local_volatility.py": (
+        "SviCalibration",
+        "BarrierMonteCarlo",
+        "svi_total_variance",
+        "calibrate_svi",
+        "dupire_local_volatility",
+        "dupire_local_vol_grid",
+        "bilinear_surface_value",
+        "local_vol_barrier_monte_carlo",
+    ),
+    "weather_derivatives.py": (
+        "OuFit",
+        "WeatherOptionMonteCarlo",
+        "heating_degree_days",
+        "fit_ou_differences",
+        "simulate_hdd_option",
+        "central_difference_sensitivity",
+    ),
+    "stochastic_volatility.py": (
+        "HestonFactor",
+        "two_factor_heston_characteristic",
+        "two_factor_heston_call",
+        "put_from_call_parity",
+    ),
 }
 CANDIDATE_LIBRARY_FILENAMES = (
     "__init__.py",
@@ -422,6 +470,139 @@ class RankedCapability:
 
 
 CAPABILITY_CATALOG: tuple[CapabilityDescriptor, ...] = (
+    CapabilityDescriptor(
+        capability_id="vanilla-option-analytics",
+        import_path="offline_common.vanilla_options",
+        summary=(
+            "Black-Scholes prices and Greeks, PDE verification, implied-volatility "
+            "inversion and approximations, and bid/ask put-call-parity forwards."
+        ),
+        api_signatures=(
+            "BlackScholesGreeks(price, delta, gamma, theta, vega, rho)",
+            "ParityForward(synthetic_bid, synthetic_ask, synthetic_mid, theoretical_forward, implied_borrow_rate, violation_amount)",
+            "black_scholes_greeks(spot, strike, rate, dividend_yield, volatility, maturity, option_type) -> BlackScholesGreeks",
+            "black_scholes_pde_residual(price, delta, gamma, theta, *, spot, rate, dividend_yield, volatility) -> float",
+            "implied_volatility_newton(market_price, spot, strike, rate, dividend_yield, maturity, *, option_type='call', initial=0.3, tolerance=1e-10, max_iterations=100) -> tuple[float, bool]",
+            "brenner_subrahmanyam_atm(call_price, discounted_spot, maturity) -> float",
+            "li_atm(call_price, discounted_spot, maturity) -> float",
+            "li_non_atm(call_price, discounted_spot, discounted_strike, maturity) -> float",
+            "corrado_miller_hallerbach(call_price, discounted_spot, discounted_strike, maturity) -> float",
+            "put_call_parity_forward(strike, call_bid, call_ask, put_bid, put_ask, *, spot, rate, dividend_yield, borrow_rate, maturity) -> ParityForward",
+        ),
+        primitive_names=("black_scholes_price", "black_scholes_greeks", "implied_volatility_black_scholes"),
+        semantic_terms=(
+            (7, ("black-scholes greeks", "black scholes greeks")),
+            (6, ("implied volatility approximation", "implied-volatility approximation")),
+            (7, ("put-call parity forward audit", "put call parity forward audit")),
+            (3, ("pde residual", "brenner-subrahmanyam", "corrado-miller-hallerbach")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="american-and-compound-options",
+        import_path="offline_common.american_options",
+        summary=(
+            "Barone-Adesi-Whaley American option approximation, CRR validation, "
+            "Geske compound options, and simple chooser pricing."
+        ),
+        api_signatures=(
+            "barone_adesi_whaley(spot, strike, rate, dividend_yield, volatility, maturity, option_type) -> tuple[float, float]",
+            "crr_american_option(spot, strike, rate, dividend_yield, volatility, maturity, option_type, *, steps=1000) -> float",
+            "geske_compound_option(spot, outer_strike, inner_strike, rate, dividend_yield, volatility, outer_maturity, inner_maturity, option_type) -> tuple[float, float]",
+            "simple_chooser_option(spot, strike, rate, dividend_yield, volatility, choose_time, maturity) -> float",
+        ),
+        primitive_names=("black_scholes_price",),
+        semantic_terms=(
+            (7, ("barone-adesi", "barone adesi", "baw american option")),
+            (7, ("geske", "compound option")),
+            (3, ("critical stock price", "call-on-call", "put-on-put")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="digital-and-barrier-binaries",
+        import_path="offline_common.digital_options",
+        summary=(
+            "Cash-or-nothing, asset-or-nothing, gap, and continuous reflected "
+            "knock-in/knock-out binary option prices."
+        ),
+        api_signatures=(
+            "cash_or_nothing(spot, strike, rate, dividend_yield, volatility, maturity, option_type, *, cash_payoff=1.0) -> float",
+            "asset_or_nothing(spot, strike, rate, dividend_yield, volatility, maturity, option_type) -> float",
+            "gap_option(spot, payoff_strike, trigger_strike, rate, dividend_yield, volatility, maturity, option_type) -> float",
+            "reflected_barrier_binary(spot, strike, barrier, rate, dividend_yield, volatility, maturity, barrier_type) -> tuple[float, float]",
+        ),
+        primitive_names=("black_scholes_price",),
+        semantic_terms=(
+            (7, ("digital options & barrier", "digital options and barrier", "barrier-style binary")),
+            (5, ("cash-or-nothing", "asset-or-nothing")),
+            (3, ("gap option", "reflection principle")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="local-volatility-surfaces",
+        import_path="offline_common.local_volatility",
+        summary=(
+            "SVI total-variance calibration, Dupire differentiation, surface "
+            "interpolation, and antithetic local-volatility barrier Monte Carlo."
+        ),
+        api_signatures=(
+            "SviCalibration(parameters, volatility_rmse, converged)",
+            "BarrierMonteCarlo(vanilla_price, vanilla_standard_error, knockout_price, knockout_standard_error, hit_probability)",
+            "svi_total_variance(log_moneyness, parameters) -> ndarray",
+            "calibrate_svi(log_moneyness, implied_volatility, maturity) -> SviCalibration",
+            "dupire_local_volatility(strike, call_price, call_time_derivative, call_strike_derivative, call_strike_second_derivative, *, rate=0.0, dividend_yield=0.0) -> float",
+            "dupire_local_vol_grid(call_prices, maturities, strikes, *, rate=0.0, dividend_yield=0.0, variance_floor=1e-8, volatility_cap=5.0) -> ndarray",
+            "bilinear_surface_value(maturity, spot, maturities, spots, values) -> float",
+            "local_vol_barrier_monte_carlo(spot, strike, barrier, maturity, rate, dividend_yield, surface_maturities, surface_spots, local_volatilities, *, paths, steps, monitoring_interval=1, seed=0) -> BarrierMonteCarlo",
+        ),
+        primitive_names=("black_scholes_price", "implied_volatility_black_scholes"),
+        semantic_terms=(
+            (7, ("dupire local volatility", "dupire local vol")),
+            (7, ("local-vol surface cleaning", "local vol surface cleaning", "local-vol barrier", "localvol barrier")),
+            (3, ("svi smoothing", "call-price surface", "local-volatility surface")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="weather-derivative-pricing",
+        import_path="offline_common.weather_derivatives",
+        summary=(
+            "Heating-degree indices, OU residual fitting, exact-transition weather "
+            "Monte Carlo, discounted option payoffs, and bump sensitivities."
+        ),
+        api_signatures=(
+            "OuFit(kappa, theta, sigma, intercept, slope)",
+            "WeatherOptionMonteCarlo(price, standard_error, index_values, payoffs)",
+            "heating_degree_days(temperatures, base_temperature) -> ndarray",
+            "fit_ou_differences(residuals, *, time_step, adjacent_mask=None) -> OuFit",
+            "simulate_hdd_option(seasonal_temperatures, *, base_temperature, strike, tick_value, rate, time_to_payment, kappa, theta, sigma, paths, seed, time_step=1.0/365.0, normal_draws=None) -> WeatherOptionMonteCarlo",
+            "central_difference_sensitivity(price_up, price_down, bump_size) -> float",
+        ),
+        primitive_names=("ols_with_intercept",),
+        semantic_terms=(
+            (7, ("hdd option pricing", "heating degree day option")),
+            (4, ("ou temperature", "ornstein-uhlenbeck temperature")),
+            (3, ("burn analysis", "exact ou transition")),
+        ),
+    ),
+    CapabilityDescriptor(
+        capability_id="two-factor-stochastic-volatility",
+        import_path="offline_common.stochastic_volatility",
+        summary=(
+            "Two-factor affine Heston characteristic functions, Gauss-Legendre "
+            "European call inversion, and continuous-carry put-call parity."
+        ),
+        api_signatures=(
+            "HestonFactor(kappa, theta, volatility_of_variance, initial_variance, correlation, variance_risk_premium=0.0)",
+            "two_factor_heston_characteristic(frequencies, maturity, spot, rate, dividend_yield, factors, probability_index) -> ndarray",
+            "two_factor_heston_call(spot, strike, maturity, rate, dividend_yield, factors, *, integration_upper=100.0, quadrature_nodes=256) -> float",
+            "put_from_call_parity(call_price, spot, strike, rate, dividend_yield, maturity) -> float",
+        ),
+        primitive_names=("implied_volatility_black_scholes",),
+        semantic_terms=(
+            (7, ("two-factor heston", "two factor heston")),
+            (5, ("chiarella-ziveyi", "chiarella ziveyi")),
+            (3, ("stochastic volatility surface", "implied volatility surface")),
+        ),
+    ),
     CapabilityDescriptor(
         capability_id="corporate-action-adjustments",
         import_path="offline_common.corporate_actions",

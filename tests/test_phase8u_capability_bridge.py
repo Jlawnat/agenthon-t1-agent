@@ -200,6 +200,12 @@ def test_capability_descriptors_are_generic_and_compliance_bounded() -> None:
         "offline_common.attribution",
         "offline_common.multimodal",
         "offline_common.process_selection",
+        "offline_common.vanilla_options",
+        "offline_common.american_options",
+        "offline_common.digital_options",
+        "offline_common.local_volatility",
+        "offline_common.weather_derivatives",
+        "offline_common.stochastic_volatility",
     }
 
     forbidden_fragments = (
